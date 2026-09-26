@@ -1,5 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+function isFalHost(hostname: string): boolean {
+  return hostname === "fal.media" || hostname.endsWith(".fal.media") || hostname === "fal.ai" || hostname.endsWith(".fal.ai");
+}
+
 function isAllowedHost(hostname: string): boolean {
   return (
     hostname === "imgen.x.ai" ||
@@ -7,7 +11,8 @@ function isAllowedHost(hostname: string): boolean {
     hostname === "data.x.ai" ||
     hostname.endsWith(".x.ai") ||
     hostname === "replicate.delivery" ||
-    hostname.endsWith(".replicate.delivery")
+    hostname.endsWith(".replicate.delivery") ||
+    isFalHost(hostname)
   );
 }
 
@@ -46,7 +51,7 @@ export const Route = createFileRoute("/api/media")({
           return new Response("Forbidden", { status: 403 });
         }
 
-        const auth = authHeader(parsed.hostname);
+        const auth = isFalHost(parsed.hostname) ? undefined : authHeader(parsed.hostname);
         const upstream = await fetch(parsed.toString(), {
           headers: auth ? { Authorization: auth } : undefined,
         });
