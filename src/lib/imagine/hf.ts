@@ -15,7 +15,7 @@ export const HF_MODELS: HfModel[] = [
     owner: "black-forest-labs",
     name: "FLUX.1-schnell",
     displayName: "FLUX.1 Schnell",
-    description: "Texto para imagem. Rápido. Licença Apache 2.0.",
+    description: "Texto para imagem, rascunho rápido. Segue o texto pior do que o Qwen Image.",
     type: "image",
     tags: ["image"],
     official: true,
@@ -32,7 +32,7 @@ export const HF_MODELS: HfModel[] = [
     owner: "Tongyi-MAI",
     name: "Z-Image-Turbo",
     displayName: "Z-Image Turbo",
-    description: "Texto para imagem. Licença Apache 2.0.",
+    description: "Texto para imagem, rápido. Menos fiel ao texto do que o Qwen Image.",
     type: "image",
     tags: ["image"],
     official: true,
@@ -49,7 +49,7 @@ export const HF_MODELS: HfModel[] = [
     owner: "Qwen",
     name: "Qwen-Image",
     displayName: "Qwen Image",
-    description: "Texto para imagem. Licença Apache 2.0.",
+    description: "Texto para imagem. Segue o texto melhor do que o Schnell.",
     type: "image",
     tags: ["image"],
     official: true,
@@ -66,7 +66,7 @@ export const HF_MODELS: HfModel[] = [
     owner: "Qwen",
     name: "Qwen-Image-Edit",
     displayName: "Qwen Image Edit",
-    description: "Edita a foto que anexares. Sem foto, não gera.",
+    description: "Muda a foto e tenta manter a mesma pessoa. Usa o formato Original.",
     type: "image",
     tags: ["image", "edit"],
     official: true,
@@ -74,7 +74,7 @@ export const HF_MODELS: HfModel[] = [
     followsPrompt: true,
     pricingLabel: "Créditos Hugging Face",
     task: "image-to-image",
-    providerId: "fal-ai/qwen-image-edit",
+    providerId: "fal-ai/qwen-image-edit-plus",
     needsImage: true,
   },
   {
@@ -115,6 +115,72 @@ export const HF_MODELS: HfModel[] = [
 
 const ASPECTS = ["1:1", "16:9", "9:16", "4:3", "3:4"];
 
+function aspectField(video: boolean, original: boolean): ModelField {
+  return {
+    key: "aspect_ratio",
+    label: "Formato",
+    kind: "enum",
+    required: false,
+    enumValues: original ? ["original", ...ASPECTS] : ASPECTS,
+    defaultValue: original ? "original" : video ? "16:9" : "1:1",
+    prominent: true,
+    lora: false,
+  };
+}
+
+function qualityField(): ModelField {
+  return {
+    key: "quality",
+    label: "Qualidade",
+    kind: "enum",
+    required: false,
+    enumValues: ["Rápida", "Equilibrada", "Alta"],
+    defaultValue: "Alta",
+    prominent: true,
+    lora: false,
+  };
+}
+
+function guidanceField(): ModelField {
+  return {
+    key: "guidance",
+    label: "Texto",
+    kind: "enum",
+    required: false,
+    enumValues: ["Baixa", "Média", "Alta"],
+    defaultValue: "Média",
+    prominent: true,
+    lora: false,
+  };
+}
+
+export function hfFields(model: HfModel): ModelField[] {
+  const edit = model.task === "image-to-image";
+  const qwen = model.providerId.includes("qwen-image") && !model.providerId.includes("klein");
+  const fields: ModelField[] = [aspectField(model.task === "text-to-video", edit), qualityField()];
+  if (qwen) fields.push(guidanceField());
+  if (edit) {
+    fields.push({
+      key: "keep_subject",
+      label: "Manter rosto",
+      kind: "boolean",
+      required: false,
+      defaultValue: true,
+      prominent: true,
+      lora: false,
+    });
+    fields.push({
+      key: "image",
+      label: "Foto",
+      kind: "image",
+      required: true,
+      prominent: false,
+      lora: false,
+    });
+  }
+  return fields;
+}
+
 export function hfModel(id: string): HfModel | undefined {
   return HF_MODELS.find((model) => model.id === id);
 }
@@ -123,25 +189,10 @@ export function isHfModel(id: string | undefined): boolean {
   return Boolean(id && id.startsWith("hf:"));
 }
 
-export function hfFields(model: HfModel): ModelField[] {
-  const aspect: ModelField = {
-    key: "aspect_ratio",
-    label: "Formato",
-    kind: "enum",
-    required: false,
-    enumValues: ASPECTS,
-    defaultValue: model.task === "text-to-video" ? "16:9" : "1:1",
-    prominent: true,
-    lora: false,
-  };
-  if (model.task === "text-to-video") return [aspect];
-  return [aspect];
-}
-
 export function hfSize(aspect: string): { width: number; height: number } {
-  if (aspect === "16:9") return { width: 1024, height: 576 };
-  if (aspect === "9:16") return { width: 576, height: 1024 };
-  if (aspect === "4:3") return { width: 1024, height: 768 };
-  if (aspect === "3:4") return { width: 768, height: 1024 };
+  if (aspect === "16:9") return { width: 1344, height: 768 };
+  if (aspect === "9:16") return { width: 768, height: 1344 };
+  if (aspect === "4:3") return { width: 1152, height: 864 };
+  if (aspect === "3:4") return { width: 864, height: 1152 };
   return { width: 1024, height: 1024 };
 }

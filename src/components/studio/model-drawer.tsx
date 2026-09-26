@@ -282,12 +282,15 @@ function fieldValueLabel(field: ModelField, value: string | number | boolean | u
   if (field.key === "duration") return `${Number(value) || field.defaultValue || 5}s`;
   if (field.kind === "boolean") {
     const on = value === true;
-    return field.key === "generate_audio" ? (on ? "Áudio" : "Sem áudio") : on ? field.label : field.label;
+    if (field.key === "generate_audio") return on ? "Áudio" : "Sem áudio";
+    if (field.key === "keep_subject") return on ? "Manter rosto" : "Rosto livre";
+    return field.label;
   }
   const names: Record<string, string> = {
     aspect_ratio: "Formato",
-    resolution: "Qualidade",
     quality: "Qualidade",
+    guidance: "Texto",
+    resolution: "Resolução",
     output_quality: "Qualidade",
     output_format: "Ficheiro",
   };

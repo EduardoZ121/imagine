@@ -34,20 +34,77 @@ function aspectOf(values: Record<string, string | number | boolean>): string {
   return typeof value === "string" ? value : "1:1";
 }
 
+function textOf(values: Record<string, string | number | boolean>, key: string, fallback: string): string {
+  const value = values[key];
+  return typeof value === "string" && value ? value : fallback;
+}
+
+function stepsFor(model: HfModel, quality: string): number {
+  if (model.providerId.includes("schnell")) return quality === "Rápida" ? 2 : 4;
+  if (model.providerId.includes("z-image")) return quality === "Rápida" ? 4 : quality === "Equilibrada" ? 6 : 8;
+  if (model.providerId.includes("klein")) return quality === "Rápida" ? 4 : quality === "Equilibrada" ? 6 : 8;
+  if (model.task === "image-to-image") return quality === "Rápida" ? 20 : quality === "Equilibrada" ? 28 : 40;
+  return quality === "Rápida" ? 12 : quality === "Equilibrada" ? 28 : 40;
+}
+
+function guidanceFor(model: HfModel, fidelity: string): number {
+  if (model.task === "image-to-image") return fidelity === "Baixa" ? 3.5 : fidelity === "Alta" ? 6.5 : 4.5;
+  return fidelity === "Baixa" ? 2 : fidelity === "Alta" ? 5 : 3.5;
+}
+
+function accelerationFor(quality: string): "none" | "regular" | "high" {
+  if (quality === "Rápida") return "high";
+  if (quality === "Alta") return "none";
+  return "regular";
+}
+
+function editPrompt(prompt: string, keep: boolean): string {
+  if (!keep) return prompt;
+  return `Keep the same person, the same face, the same body and the same identity. Do not replace them. Change only this: ${prompt}`;
+}
+
 function payloadFor(model: HfModel, prompt: string, values: Record<string, string | number | boolean>, imageUrl?: string) {
   const aspect = aspectOf(values);
+  const quality = textOf(values, "quality", "Alta");
+  const guidance = textOf(values, "guidance", "Média");
+  const keep = values.keep_subject !== false;
+  const size = aspect === "original" ? undefined : hfSize(aspect);
   if (model.task === "text-to-video") {
-    return { prompt, aspect_ratio: aspect === "1:1" ? "1:1" : aspect };
-  }
-  if (model.task === "image-to-image") {
     return {
       prompt,
-      image_url: imageUrl,
-      image_urls: imageUrl ? [imageUrl] : undefined,
-      image_size: hfSize(aspect),
+      aspect_ratio: aspect === "1:1" || aspect === "9:16" || aspect === "16:9" ? aspect : "16:9",
+      resolution: quality === "Rápida" ? "480p" : "720p",
+      num_frames: 81,
     };
   }
-  return { prompt, image_size: hfSize(aspect), num_images: 1 };
+  if (model.task === "image-to-image") {
+    const body: Record<string, unknown> = {
+      prompt: editPrompt(prompt, keep),
+      image_url: imageUrl,
+      image_urls: imageUrl ? [imageUrl] : undefined,
+      num_inference_steps: stepsFor(model, quality),
+      output_format: "jpeg",
+    };
+    if (size) body.image_size = size;
+    if (model.providerId.includes("qwen-image")) {
+      body.guidance_scale = guidanceFor(model, guidance);
+      body.acceleration = accelerationFor(quality);
+      if (keep) body.negative_prompt = "different person, new face, changed body, extra limbs, deformed, blurry";
+    }
+    return body;
+  }
+  const body: Record<string, unknown> = {
+    prompt,
+    image_size: size ?? hfSize("1:1"),
+    num_images: 1,
+    num_inference_steps: stepsFor(model, quality),
+    output_format: "jpeg",
+  };
+  if (model.providerId.includes("qwen-image")) {
+    body.guidance_scale = guidanceFor(model, guidance);
+    body.acceleration = accelerationFor(quality);
+  }
+  return body;
 }
 
 export async function startHfModel(input: {
