@@ -1,6 +1,6 @@
 export const GROK_MODEL_ID = "grok";
 
-export type CatalogProvider = "grok" | "replicate";
+export type CatalogProvider = "grok" | "replicate" | "huggingface";
 export type CatalogType = "image" | "video" | "upscale" | "other";
 
 export type CatalogModel = {

@@ -63,7 +63,7 @@ export type GalleryItem = {
   progress?: number;
   requestId?: string;
   error?: string;
-  provider?: "grok" | "replicate";
+  provider?: "grok" | "replicate" | "huggingface";
   modelId?: string;
   modelName?: string;
   runtimeSeconds?: number;

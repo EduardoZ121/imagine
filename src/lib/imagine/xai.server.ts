@@ -527,6 +527,10 @@ export async function startVideo(input: StartVideoInput): Promise<StartVideoResu
 }
 
 export async function pollVideoRequest(requestId: string): Promise<PollVideoResult> {
+  if (requestId.trim().startsWith("hf:")) {
+    const { pollHfRequest } = await import("./hf.server");
+    return pollHfRequest(requestId.trim());
+  }
   if (!replicateToken()) {
     return { ok: false, error: "A geração não está disponível neste momento." };
   }

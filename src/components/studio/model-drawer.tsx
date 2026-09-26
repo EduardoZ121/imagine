@@ -1,6 +1,7 @@
 import { Loader2, Search, Star, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { GROK_MODEL_ID, type CatalogModel, type ModelField } from "@/lib/imagine/catalog";
+import { HF_MODELS } from "@/lib/imagine/hf";
 import { searchImagineModels } from "@/lib/imagine/functions";
 import { useStudio } from "@/lib/imagine/store";
 import { cn } from "@/lib/cn";
@@ -14,6 +15,7 @@ const FILTERS = [
 ] as const;
 
 export function ModelDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [source, setSource] = useState<"replicate" | "huggingface">("replicate");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["id"]>("all");
   const [models, setModels] = useState<CatalogModel[]>([]);
@@ -25,7 +27,7 @@ export function ModelDrawer({ open, onClose }: { open: boolean; onClose: () => v
   const gallery = useStudio((s) => s.gallery);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || source !== "replicate") return;
     let cancel = false;
     const handle = window.setTimeout(() => {
       setLoading(true);
@@ -44,11 +46,19 @@ export function ModelDrawer({ open, onClose }: { open: boolean; onClose: () => v
       cancel = true;
       window.clearTimeout(handle);
     };
-  }, [open, query]);
+  }, [open, query, source]);
 
   if (!open) return null;
 
-  const shown = models.filter((model) => {
+  const catalog = source === "huggingface" ? HF_MODELS : models;
+  const shown = catalog.filter((model) => {
+    if (source === "huggingface") {
+      const blob = `${model.displayName} ${model.description}`.toLowerCase();
+      if (query && !blob.includes(query.toLowerCase())) return false;
+      if (filter === "lora" || filter === "upscale") return false;
+      if (filter === "all") return true;
+      return model.type === filter;
+    }
     if (model.id === GROK_MODEL_ID) return filter === "all" || filter === "image" || filter === "video";
     if (filter === "lora") return model.supportsLora;
     if (filter === "all") return true;
@@ -67,6 +77,28 @@ export function ModelDrawer({ open, onClose }: { open: boolean; onClose: () => v
         </button>
       </div>
       <div className="px-3">
+        <div className="mb-2 grid grid-cols-2 gap-1 rounded-full bg-surface p-1">
+          <button
+            type="button"
+            onClick={() => setSource("replicate")}
+            className={cn(
+              "h-9 rounded-full text-sm font-medium",
+              source === "replicate" ? "bg-accent text-accent-fg" : "text-muted",
+            )}
+          >
+            Replicate
+          </button>
+          <button
+            type="button"
+            onClick={() => setSource("huggingface")}
+            className={cn(
+              "h-9 rounded-full text-sm font-medium",
+              source === "huggingface" ? "bg-accent text-accent-fg" : "text-muted",
+            )}
+          >
+            Hugging Face
+          </button>
+        </div>
         <label className="flex h-11 items-center gap-2 rounded-xl bg-surface px-3">
           <Search className="size-4 text-subtle" />
           <input
@@ -93,7 +125,7 @@ export function ModelDrawer({ open, onClose }: { open: boolean; onClose: () => v
         </div>
       </div>
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-4">
-        {loading && (
+        {loading && source === "replicate" && (
           <div className="flex justify-center py-6">
             <Loader2 className="size-5 animate-spin text-subtle" />
           </div>
@@ -105,7 +137,7 @@ export function ModelDrawer({ open, onClose }: { open: boolean; onClose: () => v
                 <img src={model.thumbnail} alt="" className="size-full object-cover" />
               ) : (
                 <div className="flex size-full items-center justify-center text-xs text-subtle">
-                  {model.provider === "grok" ? "Grok" : model.owner.slice(0, 2).toUpperCase()}
+                  {model.provider === "grok" ? "Grok" : model.provider === "huggingface" ? "HF" : model.owner.slice(0, 2).toUpperCase()}
                 </div>
               )}
             </div>
@@ -114,7 +146,7 @@ export function ModelDrawer({ open, onClose }: { open: boolean; onClose: () => v
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium capitalize">{model.displayName}</p>
                   <p className="truncate text-xs text-subtle">
-                    {model.provider === "grok" ? "Predefinido" : model.owner}
+                    {model.provider === "grok" ? "Predefinido" : model.provider === "huggingface" ? "Hugging Face" : model.owner}
                     {model.official === true ? " · Oficial" : ""}
                     {model.official === false ? " · Comunidade" : ""}
                   </p>

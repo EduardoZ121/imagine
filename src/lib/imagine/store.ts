@@ -798,7 +798,7 @@ async function runCatalog(
       status: "pending",
       progress: 1,
       requestId: started.requestId,
-      provider: "replicate",
+      provider: state.catalogId.startsWith("hf:") ? "huggingface" : "replicate",
       modelId: state.catalogId,
       modelName: state.catalogName,
     };

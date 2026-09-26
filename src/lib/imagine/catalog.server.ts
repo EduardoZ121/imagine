@@ -1,5 +1,7 @@
 import { replicateAuthorization } from "./xai.server";
 import { GROK_CATALOG_MODEL, type CatalogModel, type CatalogType, type ModelField } from "./catalog";
+import { hfFields, hfModel } from "./hf";
+import { startHfModel } from "./hf.server";
 
 const REPLICATE = "https://api.replicate.com/v1";
 const CACHE_MS = 15 * 60 * 1000;
@@ -200,6 +202,8 @@ export async function describeModel(modelId: string): Promise<
   | { ok: true; model: CatalogModel; fields: ModelField[]; versionId?: string }
   | { ok: false; error: string }
 > {
+  const hosted = hfModel(modelId);
+  if (hosted) return { ok: true, model: hosted, fields: hfFields(hosted) };
   if (!MODEL_ID.test(modelId) || modelId.toLowerCase().startsWith("xai/")) {
     return { ok: false, error: "Modelo inválido." };
   }
@@ -303,6 +307,7 @@ export async function startCatalogModel(input: {
   lastFrameUrl?: string;
   videoUrl?: string;
 }): Promise<{ ok: true; requestId: string; kind: "image" | "video" } | { ok: false; error: string }> {
+  if (hfModel(input.modelId)) return startHfModel(input);
   const described = await describeModel(input.modelId);
   if (!described.ok) return described;
   const prompt = input.prompt.trim().slice(0, 4000);
