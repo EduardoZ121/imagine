@@ -39,7 +39,7 @@ export function Studio() {
       }}
     >
       <header className="flex h-12 shrink-0 items-center justify-between gap-3 px-4">
-        <span className="font-display text-lg italic tracking-tight">RemakePix</span>
+        <span className="font-display text-lg italic tracking-tight">Imagine</span>
         <button
           type="button"
           onClick={() => setModelsOpen(true)}

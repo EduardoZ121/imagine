@@ -11,3 +11,4 @@ screenshots
 artifacts
 attachments
 .DS_Store
+.env*
