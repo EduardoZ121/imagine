@@ -54,7 +54,7 @@ export function Studio() {
         )}
       </header>
 
-      <main className="h-[52dvh] shrink-0 overflow-hidden">
+      <main className="min-h-0 flex-1 overflow-hidden">
         <Gallery />
       </main>
 

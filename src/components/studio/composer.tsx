@@ -1,5 +1,5 @@
 import {
-  ChevronsUpDown,
+  ChevronDown,
   Clapperboard,
   ImageIcon,
   Loader2,
@@ -32,33 +32,51 @@ import { useStudio } from "@/lib/imagine/store";
 import { CatalogFields } from "@/components/studio/model-drawer";
 import type { RefRole } from "@/lib/imagine/types";
 
-function Chip({
-  active,
+function MenuButton({
+  open,
+  caret = true,
   onClick,
   children,
-  disabled,
-  title,
-  className,
 }: {
-  active?: boolean;
+  open?: boolean;
+  caret?: boolean;
   onClick: () => void;
   children: React.ReactNode;
-  disabled?: boolean;
-  title?: string;
-  className?: string;
 }) {
   return (
     <button
       type="button"
-      title={title}
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-xs font-medium",
+        open ? "bg-accent text-accent-fg" : "bg-surface-2 text-muted hover:text-fg",
+      )}
+    >
+      {children}
+      {caret && <ChevronDown className={cn("size-3 opacity-60", open && "rotate-180")} />}
+    </button>
+  );
+}
+
+function Pick({
+  active,
+  disabled,
+  onClick,
+  children,
+}: {
+  active?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full px-3 text-sm font-medium transition-[background-color,color,opacity] duration-[var(--motion-quick)] ease-[var(--ease-out)] disabled:opacity-40",
-        active
-          ? "bg-accent text-accent-fg"
-          : "bg-surface-2 text-muted hover:text-fg",
-        className,
+        "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-medium disabled:opacity-40",
+        active ? "bg-accent text-accent-fg" : "bg-surface-3 text-muted hover:text-fg",
       )}
     >
       {children}
@@ -90,8 +108,8 @@ function roleLabel(role: RefRole) {
 
 export function Composer() {
   const fileRef = useRef<HTMLInputElement>(null);
-  const formatRef = useRef<HTMLDivElement>(null);
-  const [formatOpen, setFormatOpen] = useState(false);
+  const dockRef = useRef<HTMLDivElement>(null);
+  const [menu, setMenu] = useState<string | null>(null);
 
   const kind = useStudio((s) => s.kind);
   const action = useStudio((s) => s.action);
@@ -161,22 +179,21 @@ export function Composer() {
   const durationMax = isExtend ? EXTEND_DURATION_MAX : VIDEO_DURATION_MAX;
 
   useEffect(() => {
-    if (!formatOpen) return;
+    if (!menu) return;
     const onPointer = (e: PointerEvent) => {
-      if (!formatRef.current?.contains(e.target as Node)) setFormatOpen(false);
+      if (!dockRef.current?.contains(e.target as Node)) setMenu(null);
     };
     window.addEventListener("pointerdown", onPointer);
     return () => window.removeEventListener("pointerdown", onPointer);
-  }, [formatOpen]);
+  }, [menu]);
 
   useEffect(() => {
-    setFormatOpen(false);
-  }, [kind]);
+    setMenu(null);
+  }, [kind, catalogId]);
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-      <div className="imagine-dock relative flex min-h-0 flex-1 flex-col rounded-2xl bg-surface p-2" ref={formatRef}>
-        <div className="min-h-0 flex-1 overflow-y-auto">
+    <div className="mx-auto w-full max-w-3xl shrink-0 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <div className="imagine-dock relative rounded-2xl bg-surface p-2" ref={dockRef}>
         {(refs.length > 0 || sourceVideo) && (
           <div className="mb-2 flex gap-2 overflow-x-auto px-1 pt-1 scrollbar-thin">
             {sourceVideo && (
@@ -232,17 +249,6 @@ export function Composer() {
           </div>
         )}
 
-        {isVideo && sourceVideo && (
-          <div className="mb-2 grid grid-cols-2 gap-1 rounded-full bg-surface-2 p-1">
-            <Chip active={action === "extend"} onClick={() => setAction("extend")}>
-              Estender
-            </Chip>
-            <Chip active={action === "edit"} onClick={() => setAction("edit")}>
-              Editar
-            </Chip>
-          </div>
-        )}
-
         <div className="flex items-end gap-1 px-1">
           <button
             type="button"
@@ -294,138 +300,132 @@ export function Composer() {
         {grok ? null : <CatalogFields />}
 
         {grok && (
-        <>
-        <div className="mt-1 grid grid-cols-2 gap-1 rounded-full bg-surface-2 p-1">
-          <Chip active={!isVideo} onClick={() => setKind("image")}>
-            <ImageIcon className="size-4" />
-            Imagem
-          </Chip>
-          <Chip active={isVideo} onClick={() => setKind("video")}>
-            <Clapperboard className="size-4" />
-            Vídeo
-          </Chip>
-        </div>
-
-        <div className="relative mt-2">
-          <div className="flex gap-1.5 overflow-x-auto px-0.5 pb-1 scrollbar-thin">
-          {!inheritFormat && (
-            <Chip active={formatOpen} onClick={() => setFormatOpen((v) => !v)}>
-              <AspectGlyph ratio={format.hint} />
-              {format.label}
-              <ChevronsUpDown className="size-3.5 opacity-70" />
-            </Chip>
-          )}
-
-          {inheritFormat && (
-            <span className="flex h-10 items-center px-2 text-xs text-subtle">Formato original</span>
-          )}
-
-          {!isVideo &&
-            IMAGE_RESOLUTIONS.map((item) => (
-              <Chip
-                key={item.id}
-                active={imageResolution === item.id}
-                onClick={() => setImageResolution(item.id)}
-              >
-                {item.label}
-              </Chip>
-            ))}
-
-          {!isVideo &&
-            IMAGE_QUALITIES.map((item) => (
-              <Chip key={item.id} active={quality === item.id} onClick={() => setQuality(item.id)}>
-                {item.label}
-              </Chip>
-            ))}
-
-          {!isVideo &&
-            [1, 2, 4].map((n) => (
-              <Chip key={n} active={imageCount === n} onClick={() => setImageCount(n)}>
-                {n}×
-              </Chip>
-            ))}
-
-          {isVideo &&
-            !inheritFormat &&
-            VIDEO_RESOLUTIONS.map((item) => (
-              <Chip
-                key={item.id}
-                active={videoResolution === item.id}
-                disabled={item.id === "1080p" && lock1080}
-                title={
-                  item.id === "1080p" && lock1080
-                    ? "1080p só em texto ou um fotograma inicial"
-                    : undefined
-                }
-                onClick={() => setVideoResolution(item.id)}
-              >
-                {item.label}
-              </Chip>
-            ))}
-
-          {isVideo && !inheritFormat && (
-            <Chip active={generateAudio} onClick={() => setGenerateAudio(!generateAudio)}>
-              {generateAudio ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
-              Áudio
-            </Chip>
-          )}
-
-          <Chip active={enhance} onClick={() => setEnhance(!enhance)} title="Interpreta o prompt antes de gerar">
-            <Wand2 className="size-4" />
-            Interpretar
-          </Chip>
+          <div className="relative mt-1">
+            {menu && (
+              <div className="absolute bottom-full left-0 right-0 z-20 mb-2 max-h-[42dvh] overflow-y-auto rounded-xl bg-surface-2 p-1.5 shadow-[0_0_0_1px_rgb(244_244_245/0.12),0_16px_40px_rgb(0_0_0/0.45)]">
+                {menu === "kind" && (
+                  <div className="grid grid-cols-2 gap-1">
+                    <Pick active={!isVideo} onClick={() => { setKind("image"); setMenu(null); }}>
+                      <ImageIcon className="size-4" /> Imagem
+                    </Pick>
+                    <Pick active={isVideo} onClick={() => { setKind("video"); setMenu(null); }}>
+                      <Clapperboard className="size-4" /> Vídeo
+                    </Pick>
+                  </div>
+                )}
+                {menu === "job" && (
+                  <div className="grid grid-cols-2 gap-1">
+                    <Pick active={action === "extend"} onClick={() => { setAction("extend"); setMenu(null); }}>Estender</Pick>
+                    <Pick active={action === "edit"} onClick={() => { setAction("edit"); setMenu(null); }}>Editar</Pick>
+                  </div>
+                )}
+                {menu === "format" &&
+                  formats.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => { setFormatId(item.id); setMenu(null); }}
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm",
+                        formatId === item.id ? "bg-surface-3 text-fg" : "text-muted hover:bg-surface-3 hover:text-fg",
+                      )}
+                    >
+                      <AspectGlyph ratio={item.hint} />
+                      <span className="flex-1 font-medium">{item.label}</span>
+                      <span className="tabular-nums text-subtle">{item.hint}</span>
+                    </button>
+                  ))}
+                {menu === "quality" && !isVideo && (
+                  <div className="space-y-2 p-1">
+                    <p className="px-1 text-[11px] uppercase tracking-wide text-subtle">Tamanho</p>
+                    <div className="flex flex-wrap gap-1">
+                      {IMAGE_RESOLUTIONS.map((item) => (
+                        <Pick key={item.id} active={imageResolution === item.id} onClick={() => setImageResolution(item.id)}>
+                          {item.label}
+                        </Pick>
+                      ))}
+                    </div>
+                    <p className="px-1 text-[11px] uppercase tracking-wide text-subtle">Qualidade</p>
+                    <div className="flex flex-wrap gap-1">
+                      {IMAGE_QUALITIES.map((item) => (
+                        <Pick key={item.id} active={quality === item.id} onClick={() => setQuality(item.id)}>
+                          {item.label}
+                        </Pick>
+                      ))}
+                    </div>
+                    <p className="px-1 text-[11px] uppercase tracking-wide text-subtle">Quantidade</p>
+                    <div className="flex flex-wrap gap-1">
+                      {[1, 2, 4].map((n) => (
+                        <Pick key={n} active={imageCount === n} onClick={() => setImageCount(n)}>{n}×</Pick>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {menu === "quality" && isVideo && (
+                  <div className="flex flex-wrap gap-1 p-1">
+                    {VIDEO_RESOLUTIONS.map((item) => (
+                      <Pick
+                        key={item.id}
+                        active={videoResolution === item.id}
+                        disabled={item.id === "1080p" && lock1080}
+                        onClick={() => setVideoResolution(item.id)}
+                      >
+                        {item.label}
+                      </Pick>
+                    ))}
+                  </div>
+                )}
+                {menu === "time" && (
+                  <div className="grid grid-cols-5 gap-1 p-1">
+                    {Array.from({ length: durationMax - durationMin + 1 }, (_, i) => durationMin + i).map((n) => (
+                      <Pick key={n} active={durationValue === n} onClick={() => { setDurationValue(n); setMenu(null); }}>
+                        {n}s
+                      </Pick>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-1.5">
+              <MenuButton open={menu === "kind"} onClick={() => setMenu(menu === "kind" ? null : "kind")}>
+                {isVideo ? "Vídeo" : "Imagem"}
+              </MenuButton>
+              {isVideo && sourceVideo && (
+                <MenuButton open={menu === "job"} onClick={() => setMenu(menu === "job" ? null : "job")}>
+                  {action === "edit" ? "Editar" : "Estender"}
+                </MenuButton>
+              )}
+              {!inheritFormat && (
+                <MenuButton open={menu === "format"} onClick={() => setMenu(menu === "format" ? null : "format")}>
+                  {format.label}
+                </MenuButton>
+              )}
+              <MenuButton open={menu === "quality"} onClick={() => setMenu(menu === "quality" ? null : "quality")}>
+                {isVideo ? videoResolution : `${imageResolution.toUpperCase()} · ${quality === "low" ? "Rápida" : "Alta"}`}
+              </MenuButton>
+              {isVideo && !isEdit && (
+                <MenuButton open={menu === "time"} onClick={() => setMenu(menu === "time" ? null : "time")}>
+                  {durationValue}s
+                </MenuButton>
+              )}
+              {isVideo && !inheritFormat && (
+                <MenuButton open={generateAudio} caret={false} onClick={() => setGenerateAudio(!generateAudio)}>
+                  {generateAudio ? <Volume2 className="size-3.5" /> : <VolumeX className="size-3.5" />}
+                  Áudio
+                </MenuButton>
+              )}
+              <MenuButton open={enhance} caret={false} onClick={() => setEnhance(!enhance)}>
+                <Wand2 className="size-3.5" />
+                Interpretar
+              </MenuButton>
+            </div>
           </div>
-        </div>
-
-        {isVideo && !isEdit && (
-          <label className="mx-0.5 mb-1 flex items-center gap-3 rounded-full bg-surface-2 px-3">
-            <span className="w-8 shrink-0 text-sm font-medium tabular-nums text-fg">{durationValue}s</span>
-            <input
-              type="range"
-              min={durationMin}
-              max={durationMax}
-              step={1}
-              value={durationValue}
-              onChange={(e) => setDurationValue(Number(e.target.value))}
-              className="h-10 w-full"
-              aria-label={isExtend ? "Duração da extensão" : "Duração do vídeo"}
-            />
-            <span className="shrink-0 text-xs tabular-nums text-subtle">
-              {durationMin}–{durationMax}s
-            </span>
-          </label>
-        )}
-        </>
         )}
 
         {error && (
-          <p className="mx-0.5 mb-1 rounded-xl bg-danger/15 px-3 py-2 text-sm leading-snug text-danger">
+          <p className="mx-0.5 mt-2 line-clamp-2 rounded-xl bg-danger/15 px-3 py-2 text-sm leading-snug text-danger">
             {error}
           </p>
-        )}
-        </div>
-
-        {formatOpen && !inheritFormat && (
-          <div className="absolute bottom-[4.5rem] left-3 z-20 w-[min(calc(100vw-2rem),18rem)] overflow-hidden rounded-xl bg-surface-2 p-1 shadow-[0_0_0_1px_rgb(244_244_245/0.12),0_16px_40px_rgb(0_0_0/0.45)]">
-            {formats.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  setFormatId(item.id);
-                  setFormatOpen(false);
-                }}
-                className={cn(
-                  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm",
-                  formatId === item.id ? "bg-surface-3 text-fg" : "text-muted hover:bg-surface-3 hover:text-fg",
-                )}
-              >
-                <AspectGlyph ratio={item.hint} />
-                <span className="flex-1 font-medium">{item.label}</span>
-                <span className="tabular-nums text-subtle">{item.hint}</span>
-              </button>
-            ))}
-          </div>
         )}
 
         <Button
@@ -439,7 +439,7 @@ export function Composer() {
           {busy ? busyLabel || "A gerar…" : cta}
         </Button>
 
-        <p className="px-2 pt-1.5 text-right text-[11px] tabular-nums text-subtle">
+        <p className="px-2 pt-1 text-right text-[11px] tabular-nums text-subtle">
           {prompt.length}/{MAX_PROMPT}
         </p>
       </div>

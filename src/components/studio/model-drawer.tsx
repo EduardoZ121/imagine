@@ -172,65 +172,99 @@ export function CatalogFields() {
   const values = useStudio((s) => s.catalogValues);
   const setCatalogValue = useStudio((s) => s.setCatalogValue);
   const official = useStudio((s) => s.catalogOfficial);
-  const name = useStudio((s) => s.catalogName);
   const setCatalogModel = useStudio((s) => s.setCatalogModel);
+  const [open, setOpen] = useState<string | null>(null);
   const loraFields = fields.filter((field) => field.lora);
   const prominent = fields.filter((field) => field.prominent && !field.lora);
   const rest = fields.filter((field) => !field.prominent && !field.lora && field.kind !== "image" && field.kind !== "video");
-  const mode = fields.some((field) => field.key === "duration")
-    ? "video"
-    : fields.some((field) => field.key === "scale" || field.key === "face_enhance")
-      ? "upscale"
-      : "image";
+  const upscale = fields.some((field) => field.key === "scale" || field.key === "face_enhance");
+  const opened = prominent.find((field) => field.key === open);
 
   return (
-    <div className="mb-2 space-y-2 px-1">
-      <div className="flex items-center justify-between gap-2">
-        <p className="truncate text-sm font-medium capitalize">{name}</p>
-        <button type="button" onClick={() => void setCatalogModel(GROK_MODEL_ID)} className="text-xs text-muted">
-          Voltar ao Grok
+    <div className="relative mt-1">
+      {open && (
+        <div className="absolute bottom-full left-0 right-0 z-20 mb-2 max-h-[42dvh] overflow-y-auto rounded-xl bg-surface-2 p-2 shadow-[0_0_0_1px_rgb(244_244_245/0.12),0_16px_40px_rgb(0_0_0/0.45)]">
+          {opened && (
+            <FieldChoices
+              field={opened}
+              value={values[opened.key]}
+              onChange={(key, value) => {
+                setCatalogValue(key, value);
+                if (opened.kind === "enum" || opened.key === "duration") setOpen(null);
+              }}
+            />
+          )}
+          {open === "more" && (
+            <div className="space-y-2">
+              {rest.map((field) => (
+                <Field key={field.key} field={field} value={values[field.key]} onChange={setCatalogValue} />
+              ))}
+              {loraFields.map((field) => (
+                <Field key={field.key} field={field} value={values[field.key]} onChange={setCatalogValue} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        {prominent.map((field) => (
+          <button
+            key={field.key}
+            type="button"
+            onClick={() => setOpen(open === field.key ? null : field.key)}
+            className={cn(
+              "inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-xs font-medium",
+              open === field.key ? "bg-accent text-accent-fg" : "bg-surface-2 text-muted",
+            )}
+          >
+            {fieldValueLabel(field, values[field.key])}
+          </button>
+        ))}
+        {(rest.length > 0 || loraFields.length > 0) && (
+          <button
+            type="button"
+            onClick={() => setOpen(open === "more" ? null : "more")}
+            className={cn(
+              "inline-flex h-8 items-center rounded-full px-2.5 text-xs font-medium",
+              open === "more" ? "bg-accent text-accent-fg" : "bg-surface-2 text-muted",
+            )}
+          >
+            Mais
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => void setCatalogModel(GROK_MODEL_ID)}
+          className="inline-flex h-8 items-center rounded-full px-2.5 text-xs text-subtle"
+        >
+          Grok
         </button>
       </div>
-      {official === false && (
-        <p className="text-xs text-muted">Comunidade: o preço pode variar. Confirma antes de gerar.</p>
-      )}
-      {mode === "video" && <p className="text-xs font-medium text-fg">Frame para vídeo</p>}
-      {mode === "image" && <p className="text-xs font-medium text-fg">Criar imagem</p>}
-      {mode === "upscale" && (
-        <p className="text-xs text-muted">Só aumenta a nitidez. O texto não muda a foto.</p>
-      )}
-      {mode === "video" && fields.some((field) => field.kind === "image") && (
-        <p className="text-xs text-muted">A foto de início entra no primeiro frame. A de fim, se existir, fecha o vídeo.</p>
-      )}
-      {mode === "video" && (
-        <p className="text-xs text-subtle">Estender um vídeo já feito só existe no Grok.</p>
-      )}
-      {prominent.map((field) => (
-        <Prominent key={field.key} field={field} value={values[field.key]} onChange={setCatalogValue} />
-      ))}
-      {(rest.length > 0 || loraFields.length > 0) && (
-        <details className="rounded-xl bg-surface-2 px-3 py-2">
-          <summary className="cursor-pointer text-sm text-fg">Mais ajustes</summary>
-          <div className="mt-2 space-y-2">
-            {rest.map((field) => (
-              <Field key={field.key} field={field} value={values[field.key]} onChange={setCatalogValue} />
-            ))}
-            {loraFields.length > 0 && (
-              <div>
-                <p className="text-xs font-medium text-fg">LoRA</p>
-                {loraFields.map((field) => (
-                  <Field key={field.key} field={field} value={values[field.key]} onChange={setCatalogValue} />
-                ))}
-              </div>
-            )}
-          </div>
-        </details>
-      )}
+      {upscale && <p className="mt-1 px-1 text-[11px] text-subtle">Só aumenta a nitidez.</p>}
+      {official === false && <p className="mt-1 px-1 text-[11px] text-subtle">Modelo da comunidade.</p>}
     </div>
   );
 }
 
-function Prominent({
+function fieldValueLabel(field: ModelField, value: string | number | boolean | undefined) {
+  if (field.key === "duration") return `${Number(value) || field.defaultValue || 5}s`;
+  if (field.kind === "boolean") {
+    const on = value === true;
+    return field.key === "generate_audio" ? (on ? "Áudio" : "Sem áudio") : on ? field.label : field.label;
+  }
+  const names: Record<string, string> = {
+    aspect_ratio: "Formato",
+    resolution: "Qualidade",
+    quality: "Qualidade",
+    output_quality: "Qualidade",
+    output_format: "Ficheiro",
+  };
+  const current = value === undefined || value === "" ? field.defaultValue : value;
+  const prefix = names[field.key];
+  return prefix ? `${prefix} ${current ?? ""}` : `${field.label} ${current ?? ""}`;
+}
+
+function FieldChoices({
   field,
   value,
   onChange,
@@ -244,51 +278,44 @@ function Prominent({
     const max = field.maximum && field.maximum <= 30 ? field.maximum : 15;
     const current = Math.min(max, Math.max(min, Number(value) || Number(field.defaultValue) || 5));
     return (
-      <label className="flex items-center gap-3 rounded-full bg-surface-2 px-3">
-        <span className="w-8 shrink-0 text-sm font-medium tabular-nums text-fg">{current}s</span>
-        <input
-          type="range"
-          min={min}
-          max={max}
-          step={1}
-          value={current}
-          onChange={(e) => onChange(field.key, Number(e.target.value))}
-          className="h-10 w-full"
-          aria-label="Duração do vídeo"
-        />
-        <span className="shrink-0 text-xs tabular-nums text-subtle">
-          {min}–{max}s
-        </span>
-      </label>
+      <div className="grid grid-cols-5 gap-1">
+        {Array.from({ length: max - min + 1 }, (_, i) => min + i).map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onChange(field.key, n)}
+            className={cn(
+              "h-9 rounded-lg text-sm font-medium",
+              current === n ? "bg-accent text-accent-fg" : "bg-surface-3 text-muted",
+            )}
+          >
+            {n}s
+          </button>
+        ))}
+      </div>
     );
   }
   if (field.kind === "boolean") {
     const on = value === true;
     return (
-      <button
-        type="button"
-        onClick={() => onChange(field.key, !on)}
-        className={cn("h-9 rounded-full px-3 text-sm", on ? "bg-accent text-accent-fg" : "bg-surface-2 text-muted")}
-      >
-        {field.key === "generate_audio" ? (on ? "Áudio ligado" : "Áudio desligado") : field.label}
-      </button>
+      <div className="grid grid-cols-2 gap-1">
+        <button type="button" onClick={() => onChange(field.key, true)} className={cn("h-9 rounded-lg text-sm", on ? "bg-accent text-accent-fg" : "bg-surface-3 text-muted")}>Ligado</button>
+        <button type="button" onClick={() => onChange(field.key, false)} className={cn("h-9 rounded-lg text-sm", !on ? "bg-accent text-accent-fg" : "bg-surface-3 text-muted")}>Desligado</button>
+      </div>
     );
   }
   if (field.kind === "enum" && field.enumValues) {
     const current = String(value ?? field.defaultValue ?? field.enumValues[0]);
-    const label =
-      field.key === "aspect_ratio" ? "Formato" : field.key === "resolution" || field.key === "quality" ? "Qualidade" : field.label;
     return (
-      <div className="flex gap-2 overflow-x-auto scrollbar-thin">
-        <span className="flex h-9 shrink-0 items-center text-xs text-subtle">{label}</span>
+      <div className="flex flex-wrap gap-1">
         {field.enumValues.map((item) => (
           <button
             key={item}
             type="button"
             onClick={() => onChange(field.key, field.numeric ? Number(item) : item)}
             className={cn(
-              "h-9 shrink-0 rounded-full px-3 text-sm",
-              current === item ? "bg-accent text-accent-fg" : "bg-surface-2 text-muted",
+              "h-9 rounded-lg px-3 text-sm",
+              current === item ? "bg-accent text-accent-fg" : "bg-surface-3 text-muted",
             )}
           >
             {item}
