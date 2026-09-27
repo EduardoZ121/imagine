@@ -14,10 +14,10 @@ export type HfModel = CatalogModel & {
 
 export const HF_MODELS: HfModel[] = [
   {
-    id: "hf:John6666/big-asp-v2-sdxl",
+    id: "hf:fancyfeast/big-asp-v2",
     provider: "huggingface",
-    owner: "John6666",
-    name: "big-asp-v2-sdxl",
+    owner: "fancyfeast",
+    name: "big-asp-v2",
     displayName: "BigASP v2",
     description:
       "Modelo SDXL da comunidade para adultos (18+). Texto para imagem; a primeira geração pode demorar enquanto a GPU inicia.",
@@ -28,7 +28,7 @@ export const HF_MODELS: HfModel[] = [
     followsPrompt: true,
     pricingLabel: "Endpoint dedicado Hugging Face",
     task: "text-to-image",
-    providerId: "John6666/big-asp-v2-sdxl",
+    providerId: "fancyfeast/big-asp-v2",
     needsImage: false,
     endpoint: {
       env: "HF_BIGASP_ENDPOINT_URL",
@@ -36,10 +36,10 @@ export const HF_MODELS: HfModel[] = [
     },
   },
   {
-    id: "hf:John6666/lustify-sdxl-nsfwsfw-v2-sdxl",
+    id: "hf:TheImposterImposters/LUSTIFY-v2.0",
     provider: "huggingface",
-    owner: "John6666",
-    name: "lustify-sdxl-nsfwsfw-v2-sdxl",
+    owner: "TheImposterImposters",
+    name: "LUSTIFY-v2.0",
     displayName: "Lustify SDXL v2",
     description:
       "Modelo SDXL da comunidade para adultos (18+). Texto para imagem com detalhe fotográfico.",
@@ -50,7 +50,7 @@ export const HF_MODELS: HfModel[] = [
     followsPrompt: true,
     pricingLabel: "Endpoint dedicado Hugging Face",
     task: "text-to-image",
-    providerId: "John6666/lustify-sdxl-nsfwsfw-v2-sdxl",
+    providerId: "TheImposterImposters/LUSTIFY-v2.0",
     needsImage: false,
     endpoint: {
       env: "HF_LUSTIFY_ENDPOINT_URL",

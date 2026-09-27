@@ -63,6 +63,7 @@ function stepsFor(model: HfModel, quality: string): number {
 }
 
 function guidanceFor(model: HfModel, fidelity: string): number {
+  if (model.endpoint) return fidelity === "Baixa" ? 4 : fidelity === "Alta" ? 7 : 5.5;
   if (model.providerId.includes("kontext"))
     return fidelity === "Baixa" ? 2 : fidelity === "Alta" ? 3.5 : 2.5;
   if (model.task === "image-to-image")
