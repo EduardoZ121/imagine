@@ -38,20 +38,24 @@ export function Studio() {
         if (e.dataTransfer.files.length) void addFiles(e.dataTransfer.files);
       }}
     >
-      <header className="flex h-12 shrink-0 items-center justify-between gap-3 px-4">
-        <span className="font-display text-lg italic tracking-tight">Imagine</span>
+      <header className="grid h-12 shrink-0 grid-cols-[1fr_minmax(0,auto)_1fr] items-center gap-2 px-4">
+        <span className="justify-self-start font-display text-lg italic tracking-tight">
+          Imagine
+        </span>
         <button
           type="button"
           onClick={() => setModelsOpen(true)}
-          className="max-w-[62%] truncate rounded-full bg-surface px-3 py-1.5 text-sm text-fg"
+          className="max-w-[55vw] justify-self-center truncate rounded-full bg-surface px-3 py-1.5 text-sm text-fg"
         >
           {catalogName}
         </button>
-        {available === false && (
-          <span className="rounded-full border border-border px-3 py-1 text-xs text-muted">
-            IA indisponível
-          </span>
-        )}
+        <div className="justify-self-end">
+          {available === false && (
+            <span className="rounded-full border border-border px-3 py-1 text-xs text-muted">
+              IA indisponível
+            </span>
+          )}
+        </div>
       </header>
 
       <main className="min-h-0 flex-1 overflow-hidden">
