@@ -25,6 +25,9 @@ function hfError(status: number, raw: string): string {
   if (status === 503 || lower.includes("initializing") || lower.includes("scaled to zero")) {
     return "O modelo ainda está a iniciar. Espera um minuto e tenta novamente.";
   }
+  if (lower.includes("out of memory") || lower.includes("cuda")) {
+    return "A GPU não conseguiu processar este formato. Escolhe um formato menor e tenta novamente.";
+  }
   if (
     lower.includes("sexual") ||
     lower.includes("nsfw") ||
@@ -119,7 +122,17 @@ function endpointPayload(
 ) {
   const quality = textOf(values, "quality", "Alta");
   const guidance = textOf(values, "guidance", "Média");
-  const { width, height } = hfSize(aspectOf(values));
+  const aspect = aspectOf(values);
+  const { width, height } =
+    aspect === "16:9"
+      ? { width: 896, height: 512 }
+      : aspect === "9:16"
+        ? { width: 512, height: 896 }
+        : aspect === "4:3"
+          ? { width: 768, height: 576 }
+          : aspect === "3:4"
+            ? { width: 576, height: 768 }
+            : { width: 768, height: 768 };
   return {
     inputs: prompt,
     parameters: {
