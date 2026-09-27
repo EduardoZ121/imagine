@@ -66,6 +66,9 @@ function stepsFor(model: HfModel, quality: string): number {
 }
 
 function guidanceFor(model: HfModel, fidelity: string): number {
+  if (model.endpoint?.handler === "instruct-pix2pix") {
+    return fidelity === "Baixa" ? 5 : fidelity === "Alta" ? 10 : 7.5;
+  }
   if (model.endpoint) return fidelity === "Baixa" ? 4 : fidelity === "Alta" ? 7 : 5.5;
   if (model.providerId.includes("kontext"))
     return fidelity === "Baixa" ? 2 : fidelity === "Alta" ? 3.5 : 2.5;
@@ -119,9 +122,41 @@ function endpointPayload(
   model: HfModel,
   prompt: string,
   values: Record<string, string | number | boolean>,
+  imageBase64?: string,
 ) {
   const quality = textOf(values, "quality", "Alta");
   const guidance = textOf(values, "guidance", "Média");
+  const strength = textOf(values, "strength", "Média");
+  const negativePrompt = textOf(
+    values,
+    "negative_prompt",
+    "low quality, blurry, deformed, extra fingers, watermark, text",
+  ).slice(0, 1000);
+
+  if (model.endpoint?.handler === "instruct-pix2pix") {
+    return {
+      inputs: prompt,
+      image: imageBase64,
+      parameters: {
+        num_inference_steps: quality === "Rápida" ? 15 : quality === "Equilibrada" ? 20 : 30,
+        guidance_scale: guidanceFor(model, guidance),
+        image_guidance_scale: strength === "Suave" ? 2 : strength === "Forte" ? 1.1 : 1.5,
+        negative_prompt: negativePrompt,
+      },
+    };
+  }
+
+  if (model.endpoint?.handler === "picasso") {
+    return {
+      inputs: prompt,
+      image: imageBase64,
+      num_inference_steps: quality === "Rápida" ? 15 : quality === "Equilibrada" ? 25 : 35,
+      guidance_scale: guidanceFor(model, guidance),
+      strength: strength === "Suave" ? 0.35 : strength === "Forte" ? 0.8 : 0.6,
+      negative_prompt: negativePrompt,
+    };
+  }
+
   const aspect = aspectOf(values);
   const { width, height } =
     aspect === "16:9"
@@ -140,13 +175,18 @@ function endpointPayload(
       height,
       num_inference_steps: quality === "Rápida" ? 20 : quality === "Equilibrada" ? 30 : 40,
       guidance_scale: guidanceFor(model, guidance),
-      negative_prompt: textOf(
-        values,
-        "negative_prompt",
-        "low quality, blurry, deformed, extra fingers, watermark, text",
-      ).slice(0, 1000),
+      negative_prompt: negativePrompt,
     },
   };
+}
+
+function imageBase64(imageUrl: string | undefined): string | undefined {
+  if (!imageUrl) return undefined;
+  const match = imageUrl.match(/^data:image\/(?:jpeg|jpg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/);
+  if (!match?.[1] || match[1].length > 8_000_000) return undefined;
+  const bytes = Buffer.from(match[1], "base64");
+  if (!bytes.length || bytes.length > 6_000_000) return undefined;
+  return match[1];
 }
 
 async function runEndpointModel(
@@ -154,9 +194,19 @@ async function runEndpointModel(
   token: string,
   prompt: string,
   values: Record<string, string | number | boolean>,
+  imageUrl?: string,
 ): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
   const url = endpointUrl(model);
   if (!url) return { ok: false, error: "O endpoint deste modelo não está configurado." };
+  const encodedImage = imageBase64(imageUrl);
+  if (model.endpoint?.handler && !encodedImage) {
+    return {
+      ok: false,
+      error: "A foto não pôde ser preparada para este modelo. Anexa a imagem outra vez.",
+    };
+  }
+  const keep = values.keep_subject !== false;
+  const instruction = model.task === "image-to-image" ? editPrompt(prompt, keep) : prompt;
   let response: Response;
   try {
     response = await fetch(url, {
@@ -167,7 +217,7 @@ async function runEndpointModel(
         "Content-Type": "application/json",
         "X-Scale-Up-Timeout": "600",
       },
-      body: JSON.stringify(endpointPayload(model, prompt, values)),
+      body: JSON.stringify(endpointPayload(model, instruction, values, encodedImage)),
       signal: AbortSignal.timeout(12 * 60 * 1000),
     });
   } catch (error) {
@@ -310,7 +360,7 @@ export async function startHfModel(input: {
     };
   }
   if (model.endpoint) {
-    const result = await runEndpointModel(model, token, prompt, input.values);
+    const result = await runEndpointModel(model, token, prompt, input.values, input.imageUrl);
     return result.ok ? { ok: true, url: result.url, kind: "image" } : result;
   }
   const url = `${ROUTER}/${model.providerId}?_subdomain=queue`;

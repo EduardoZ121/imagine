@@ -360,6 +360,7 @@ function fieldValueLabel(field: ModelField, value: string | number | boolean | u
     aspect_ratio: "Formato",
     quality: "Qualidade",
     guidance: "Texto",
+    strength: "Mudança",
     resolution: "Resolução",
     output_quality: "Qualidade",
     output_format: "Ficheiro",

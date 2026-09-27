@@ -9,10 +9,57 @@ export type HfModel = CatalogModel & {
   endpoint?: {
     env: string;
     fallbackUrl: string;
+    handler?: "picasso" | "instruct-pix2pix";
   };
 };
 
 export const HF_MODELS: HfModel[] = [
+  {
+    id: "hf:Eddy12253/imagine-instruct-pix2pix",
+    provider: "huggingface",
+    owner: "Eddy12253",
+    name: "imagine-instruct-pix2pix",
+    displayName: "InstructPix2Pix",
+    description:
+      "Edita a foto seguindo uma instrução directa. Bom para cor, estilo, fundo e alterações localizadas.",
+    type: "image",
+    tags: ["image", "edit", "18+"],
+    official: false,
+    supportsLora: false,
+    followsPrompt: true,
+    pricingLabel: "Endpoint dedicado Hugging Face",
+    task: "image-to-image",
+    providerId: "timbrooks/instruct-pix2pix",
+    needsImage: true,
+    endpoint: {
+      env: "HF_INSTRUCT_I2I_ENDPOINT_URL",
+      fallbackUrl: "https://6ab9392b9ec415b652acd801.endpoints.huggingface.cloud",
+      handler: "instruct-pix2pix",
+    },
+  },
+  {
+    id: "hf:aipicasso/picasso-diffusion-1-1",
+    provider: "huggingface",
+    owner: "aipicasso",
+    name: "picasso-diffusion-1-1",
+    displayName: "Picasso Img2Img",
+    description:
+      "Transformação livre da foto com controlo da intensidade. Mantém mais da imagem no modo Suave.",
+    type: "image",
+    tags: ["image", "edit", "18+"],
+    official: false,
+    supportsLora: false,
+    followsPrompt: true,
+    pricingLabel: "Endpoint dedicado Hugging Face",
+    task: "image-to-image",
+    providerId: "aipicasso/picasso-diffusion-1-1",
+    needsImage: true,
+    endpoint: {
+      env: "HF_PICASSO_I2I_ENDPOINT_URL",
+      fallbackUrl: "https://6ab9392b9ec415b652acd800.endpoints.huggingface.cloud",
+      handler: "picasso",
+    },
+  },
   {
     id: "hf:fancyfeast/big-asp-v2",
     provider: "huggingface",
@@ -270,6 +317,19 @@ function guidanceField(): ModelField {
   };
 }
 
+function strengthField(): ModelField {
+  return {
+    key: "strength",
+    label: "Mudança",
+    kind: "enum",
+    required: false,
+    enumValues: ["Suave", "Média", "Forte"],
+    defaultValue: "Média",
+    prominent: true,
+    lora: false,
+  };
+}
+
 export function hfFields(model: HfModel): ModelField[] {
   const usesPhoto = model.task === "image-to-image" || model.task === "image-to-video";
   const guided =
@@ -281,6 +341,7 @@ export function hfFields(model: HfModel): ModelField[] {
     qualityField(),
   ];
   if (guided) fields.push(guidanceField());
+  if (model.endpoint?.handler) fields.push(strengthField());
   if (model.endpoint) {
     fields.push({
       key: "negative_prompt",
@@ -321,6 +382,11 @@ export function hfModel(id: string): HfModel | undefined {
 
 export function isHfModel(id: string | undefined): boolean {
   return Boolean(id && id.startsWith("hf:"));
+}
+
+export function isDedicatedHfImageEditor(id: string | undefined): boolean {
+  const model = id ? hfModel(id) : undefined;
+  return Boolean(model?.endpoint?.handler && model.task === "image-to-image");
 }
 
 export function hfSize(aspect: string): { width: number; height: number } {

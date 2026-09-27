@@ -19,9 +19,11 @@ import {
   startImagineVideo,
 } from "./functions";
 import { GROK_MODEL_ID, isGrokModel, type ModelField } from "./catalog";
+import { isDedicatedHfImageEditor } from "./hf";
 import { cacheRemoteMedia, deleteBlob, getBlob, loadGalleryMeta, saveGalleryMeta } from "./gallery";
 import {
   compressImageFile,
+  constrainImageForEndpoint,
   downloadFromUrl,
   filenameFor,
   newId,
@@ -765,7 +767,10 @@ async function runCatalog(state: StudioState, set: SetState, get: GetState) {
   }
   set({ busy: true, busyLabel: "A enviar para o modelo…", error: null });
   try {
-    const imageUrl = state.refs.find((ref) => ref.role === "start")?.url || state.refs[0]?.url;
+    let imageUrl = state.refs.find((ref) => ref.role === "start")?.url || state.refs[0]?.url;
+    if (imageUrl && isDedicatedHfImageEditor(state.catalogId)) {
+      imageUrl = await constrainImageForEndpoint(imageUrl);
+    }
     if (imageUrl && !imageUrl.startsWith("data:image/") && !imageUrl.startsWith("https://")) {
       const error = "O envio da foto falhou. Anexa a imagem outra vez.";
       set({ busy: false, busyLabel: "", error });

@@ -34,6 +34,30 @@ export async function compressImageFile(file: File): Promise<string> {
   }
 }
 
+export async function constrainImageForEndpoint(source: string, maxPixels = 768): Promise<string> {
+  try {
+    const response = await fetch(displaySrc(source));
+    if (!response.ok) return source;
+    const bitmap = await createImageBitmap(await response.blob());
+    const scale = Math.min(1, maxPixels / Math.max(bitmap.width, bitmap.height));
+    const width = Math.max(64, Math.round((bitmap.width * scale) / 64) * 64);
+    const height = Math.max(64, Math.round((bitmap.height * scale) / 64) * 64);
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      bitmap.close();
+      return source;
+    }
+    context.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+    return canvas.toDataURL("image/jpeg", 0.9);
+  } catch {
+    return source;
+  }
+}
+
 export async function videoFileToDataUrl(file: File): Promise<string> {
   if (!file.type.startsWith("video/")) {
     throw new Error("Só são aceites vídeos MP4.");
@@ -57,9 +81,8 @@ export function displaySrc(url: string): string {
 }
 
 export function downloadFromUrl(url: string, filename: string) {
-  const href = url.startsWith("data:") || url.startsWith("blob:")
-    ? url
-    : mediaProxyUrl(url, filename, true);
+  const href =
+    url.startsWith("data:") || url.startsWith("blob:") ? url : mediaProxyUrl(url, filename, true);
   const a = document.createElement("a");
   a.href = href;
   a.download = filename;
