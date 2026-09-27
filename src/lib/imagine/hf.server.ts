@@ -22,7 +22,15 @@ function hfError(status: number, raw: string): string {
   if (status === 402 || lower.includes("credit") || lower.includes("exceeded")) {
     return "Sem crédito na Hugging Face para esta geração.";
   }
-  if (lower.includes("sexual") || lower.includes("nsfw") || lower.includes("safety") || lower.includes("moderation")) {
+  if (status === 503 || lower.includes("initializing") || lower.includes("scaled to zero")) {
+    return "O modelo ainda está a iniciar. Espera um minuto e tenta novamente.";
+  }
+  if (
+    lower.includes("sexual") ||
+    lower.includes("nsfw") ||
+    lower.includes("safety") ||
+    lower.includes("moderation")
+  ) {
     return "A moderação deste modelo bloqueou o pedido. Muda o texto.";
   }
   if (status === 429) return "Demasiados pedidos na Hugging Face. Espera um momento.";
@@ -34,22 +42,31 @@ function aspectOf(values: Record<string, string | number | boolean>): string {
   return typeof value === "string" ? value : "1:1";
 }
 
-function textOf(values: Record<string, string | number | boolean>, key: string, fallback: string): string {
+function textOf(
+  values: Record<string, string | number | boolean>,
+  key: string,
+  fallback: string,
+): string {
   const value = values[key];
   return typeof value === "string" && value ? value : fallback;
 }
 
 function stepsFor(model: HfModel, quality: string): number {
   if (model.providerId.includes("schnell")) return quality === "Rápida" ? 2 : 4;
-  if (model.providerId.includes("z-image")) return quality === "Rápida" ? 4 : quality === "Equilibrada" ? 6 : 8;
-  if (model.providerId.includes("klein")) return quality === "Rápida" ? 4 : quality === "Equilibrada" ? 6 : 8;
-  if (model.task === "image-to-image") return quality === "Rápida" ? 20 : quality === "Equilibrada" ? 28 : 40;
+  if (model.providerId.includes("z-image"))
+    return quality === "Rápida" ? 4 : quality === "Equilibrada" ? 6 : 8;
+  if (model.providerId.includes("klein"))
+    return quality === "Rápida" ? 4 : quality === "Equilibrada" ? 6 : 8;
+  if (model.task === "image-to-image")
+    return quality === "Rápida" ? 20 : quality === "Equilibrada" ? 28 : 40;
   return quality === "Rápida" ? 12 : quality === "Equilibrada" ? 28 : 40;
 }
 
 function guidanceFor(model: HfModel, fidelity: string): number {
-  if (model.providerId.includes("kontext")) return fidelity === "Baixa" ? 2 : fidelity === "Alta" ? 3.5 : 2.5;
-  if (model.task === "image-to-image") return fidelity === "Baixa" ? 3.5 : fidelity === "Alta" ? 6.5 : 4.5;
+  if (model.providerId.includes("kontext"))
+    return fidelity === "Baixa" ? 2 : fidelity === "Alta" ? 3.5 : 2.5;
+  if (model.task === "image-to-image")
+    return fidelity === "Baixa" ? 3.5 : fidelity === "Alta" ? 6.5 : 4.5;
   return fidelity === "Baixa" ? 2 : fidelity === "Alta" ? 5 : 3.5;
 }
 
@@ -64,7 +81,105 @@ function editPrompt(prompt: string, keep: boolean): string {
   return `Keep the same person, the same face, the same body and the same identity. Do not replace them. Change only this: ${prompt}`;
 }
 
-function payloadFor(model: HfModel, prompt: string, values: Record<string, string | number | boolean>, imageUrl?: string) {
+function unsafeAdultPrompt(prompt: string): boolean {
+  const normalized = prompt
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+  return (
+    /\b(child|children|kid|kids|minor|underage|preteen|schoolgirl|schoolboy|crianca|criancas|menor|menores|infantil)\b/.test(
+      normalized,
+    ) ||
+    /\b(rape|raped|forced sex|without consent|nonconsensual|non-consensual|violacao sexual|sem consentimento)\b/.test(
+      normalized,
+    )
+  );
+}
+
+function endpointUrl(model: HfModel): string | undefined {
+  if (!model.endpoint) return undefined;
+  const configured = process.env[model.endpoint.env]?.trim();
+  const value = configured || model.endpoint.fallbackUrl;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "https:" || !parsed.hostname.endsWith(".endpoints.huggingface.cloud")) {
+      return undefined;
+    }
+    return parsed.origin;
+  } catch {
+    return undefined;
+  }
+}
+
+function endpointPayload(
+  model: HfModel,
+  prompt: string,
+  values: Record<string, string | number | boolean>,
+) {
+  const quality = textOf(values, "quality", "Alta");
+  const guidance = textOf(values, "guidance", "Média");
+  const { width, height } = hfSize(aspectOf(values));
+  return {
+    inputs: prompt,
+    parameters: {
+      width,
+      height,
+      num_inference_steps: quality === "Rápida" ? 20 : quality === "Equilibrada" ? 30 : 40,
+      guidance_scale: guidanceFor(model, guidance),
+      negative_prompt: textOf(
+        values,
+        "negative_prompt",
+        "low quality, blurry, deformed, extra fingers, watermark, text",
+      ).slice(0, 1000),
+    },
+  };
+}
+
+async function runEndpointModel(
+  model: HfModel,
+  token: string,
+  prompt: string,
+  values: Record<string, string | number | boolean>,
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const url = endpointUrl(model);
+  if (!url) return { ok: false, error: "O endpoint deste modelo não está configurado." };
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "image/jpeg",
+        "Content-Type": "application/json",
+        "X-Scale-Up-Timeout": "600",
+      },
+      body: JSON.stringify(endpointPayload(model, prompt, values)),
+      signal: AbortSignal.timeout(12 * 60 * 1000),
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      return { ok: false, error: "O modelo demorou demasiado a iniciar. Tenta novamente." };
+    }
+    return { ok: false, error: "Não consegui contactar o endpoint da Hugging Face." };
+  }
+  if (!response.ok) return { ok: false, error: hfError(response.status, await response.text()) };
+  const contentType = response.headers.get("content-type")?.split(";")[0]?.trim() || "";
+  if (!contentType.startsWith("image/")) {
+    return { ok: false, error: "A Hugging Face não devolveu uma imagem." };
+  }
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (!bytes.length || bytes.length > 4_000_000) {
+    return { ok: false, error: "A imagem devolvida é inválida ou demasiado grande." };
+  }
+  return { ok: true, url: `data:${contentType};base64,${bytes.toString("base64")}` };
+}
+
+function payloadFor(
+  model: HfModel,
+  prompt: string,
+  values: Record<string, string | number | boolean>,
+  imageUrl?: string,
+) {
   const aspect = aspectOf(values);
   const quality = textOf(values, "quality", "Alta");
   const guidance = textOf(values, "guidance", "Média");
@@ -110,7 +225,8 @@ function payloadFor(model: HfModel, prompt: string, values: Record<string, strin
         image_url: imageUrl,
         num_inference_steps: quality === "Rápida" ? 20 : quality === "Equilibrada" ? 28 : 35,
         guidance_scale: guidanceFor(model, guidance),
-        resolution_mode: aspect === "16:9" || aspect === "9:16" || aspect === "1:1" ? aspect : "match_input",
+        resolution_mode:
+          aspect === "16:9" || aspect === "9:16" || aspect === "1:1" ? aspect : "match_input",
         output_format: "jpeg",
       };
     }
@@ -125,7 +241,9 @@ function payloadFor(model: HfModel, prompt: string, values: Record<string, strin
     if (model.providerId.includes("qwen-image")) {
       body.guidance_scale = guidanceFor(model, guidance);
       body.acceleration = accelerationFor(quality);
-      if (keep) body.negative_prompt = "different person, new face, changed body, extra limbs, deformed, blurry";
+      if (keep)
+        body.negative_prompt =
+          "different person, new face, changed body, extra limbs, deformed, blurry";
     }
     return body;
   }
@@ -148,21 +266,38 @@ export async function startHfModel(input: {
   prompt: string;
   values: Record<string, string | number | boolean>;
   imageUrl?: string;
-}): Promise<{ ok: true; requestId: string; kind: "image" | "video" } | { ok: false; error: string }> {
+}): Promise<
+  | { ok: true; requestId?: string; url?: string; kind: "image" | "video" }
+  | { ok: false; error: string }
+> {
   const model = hfModel(input.modelId);
   if (!model) return { ok: false, error: "Este modelo da Hugging Face não está nesta lista." };
   const token = hfToken();
   if (!token) return { ok: false, error: "A Hugging Face não está configurada neste servidor." };
   const prompt = input.prompt.trim().slice(0, 2000);
   if (!prompt) return { ok: false, error: "Escreve um prompt." };
+  if (model.endpoint && unsafeAdultPrompt(prompt)) {
+    return {
+      ok: false,
+      error: "Os modelos 18+ não aceitam pedidos com menores ou sem consentimento.",
+    };
+  }
   if (model.needsImage && !input.imageUrl) {
-    return { ok: false, error: "Este modelo precisa de uma foto. Anexa uma imagem. Crédito não foi gasto." };
+    return {
+      ok: false,
+      error: "Este modelo precisa de uma foto. Anexa uma imagem. Crédito não foi gasto.",
+    };
   }
   if (!model.needsImage && input.imageUrl) {
     return {
       ok: false,
-      error: "Este modelo ignora a foto e inventa outra pessoa. Escolhe Qwen Image Edit, FLUX Kontext ou FLUX.2 Klein. Crédito não foi gasto.",
+      error:
+        "Este modelo ignora a foto e inventa outra pessoa. Escolhe Qwen Image Edit, FLUX Kontext ou FLUX.2 Klein. Crédito não foi gasto.",
     };
+  }
+  if (model.endpoint) {
+    const result = await runEndpointModel(model, token, prompt, input.values);
+    return result.ok ? { ok: true, url: result.url, kind: "image" } : result;
   }
   const url = `${ROUTER}/${model.providerId}?_subdomain=queue`;
   let response: Response;
@@ -183,7 +318,8 @@ export async function startHfModel(input: {
   } catch {
     return { ok: false, error: "A Hugging Face devolveu uma resposta inválida." };
   }
-  if (!json.request_id || !json.response_url) return { ok: false, error: "A Hugging Face não abriu o pedido." };
+  if (!json.request_id || !json.response_url)
+    return { ok: false, error: "A Hugging Face não abriu o pedido." };
   let path = "";
   try {
     path = new URL(json.response_url).pathname.replace(/^\//, "");
@@ -211,7 +347,9 @@ type HfTicket = { path: string; kind: "image" | "video" };
 function readTicket(requestId: string): HfTicket | undefined {
   if (!requestId.startsWith("hf:")) return undefined;
   try {
-    const json = JSON.parse(Buffer.from(requestId.slice(3), "base64url").toString("utf8")) as HfTicket;
+    const json = JSON.parse(
+      Buffer.from(requestId.slice(3), "base64url").toString("utf8"),
+    ) as HfTicket;
     if (!json.path || (json.kind !== "image" && json.kind !== "video")) return undefined;
     if (!/^fal-ai\/[A-Za-z0-9./_-]{8,180}$/.test(json.path)) return undefined;
     return json;
@@ -239,7 +377,9 @@ function mediaUrl(value: unknown): string | undefined {
   return undefined;
 }
 
-export async function pollHfRequest(requestId: string): Promise<
+export async function pollHfRequest(
+  requestId: string,
+): Promise<
   | { ok: true; status: "pending"; progress: number }
   | { ok: true; status: "done"; progress: 100; url: string }
   | { ok: true; status: "failed"; progress: 100; error: string }
@@ -265,7 +405,12 @@ export async function pollHfRequest(requestId: string): Promise<
     return { ok: true, status: "pending", progress: 20 };
   }
   if (status === "FAILED" || status === "ERROR") {
-    return { ok: true, status: "failed", progress: 100, error: "A geração na Hugging Face falhou." };
+    return {
+      ok: true,
+      status: "failed",
+      progress: 100,
+      error: "A geração na Hugging Face falhou.",
+    };
   }
   if (status !== "COMPLETED") {
     return { ok: true, status: "pending", progress: status === "IN_PROGRESS" ? 60 : 18 };
@@ -278,10 +423,21 @@ export async function pollHfRequest(requestId: string): Promise<
   try {
     json = JSON.parse(body);
   } catch {
-    return { ok: true, status: "failed", progress: 100, error: "A Hugging Face não devolveu o ficheiro." };
+    return {
+      ok: true,
+      status: "failed",
+      progress: 100,
+      error: "A Hugging Face não devolveu o ficheiro.",
+    };
   }
   const url = mediaUrl(json);
-  if (!url) return { ok: true, status: "failed", progress: 100, error: "A Hugging Face não devolveu o ficheiro." };
+  if (!url)
+    return {
+      ok: true,
+      status: "failed",
+      progress: 100,
+      error: "A Hugging Face não devolveu o ficheiro.",
+    };
   return { ok: true, status: "done", progress: 100, url };
 }
 

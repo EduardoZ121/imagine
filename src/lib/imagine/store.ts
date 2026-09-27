@@ -19,14 +19,15 @@ import {
   startImagineVideo,
 } from "./functions";
 import { GROK_MODEL_ID, isGrokModel, type ModelField } from "./catalog";
+import { cacheRemoteMedia, deleteBlob, getBlob, loadGalleryMeta, saveGalleryMeta } from "./gallery";
 import {
-  cacheRemoteMedia,
-  deleteBlob,
-  getBlob,
-  loadGalleryMeta,
-  saveGalleryMeta,
-} from "./gallery";
-import { compressImageFile, downloadFromUrl, filenameFor, newId, sleep, videoFileToDataUrl } from "./media";
+  compressImageFile,
+  downloadFromUrl,
+  filenameFor,
+  newId,
+  sleep,
+  videoFileToDataUrl,
+} from "./media";
 import type {
   GalleryItem,
   ImageAspectRatio,
@@ -51,7 +52,11 @@ function persist(items: GalleryItem[]) {
 
 function shownError(raw: string | undefined): string {
   if (!raw) return "A geração falhou. Tenta de novo.";
-  if (raw.startsWith("A moderação") || raw.startsWith("Este modelo") || raw.startsWith("Crédito não")) {
+  if (
+    raw.startsWith("A moderação") ||
+    raw.startsWith("Este modelo") ||
+    raw.startsWith("Crédito não")
+  ) {
     return raw;
   }
   const lower = raw.toLowerCase();
@@ -499,7 +504,8 @@ export const useStudio = create<StudioState>((set, get) => ({
       }
       const values: Record<string, string | number | boolean> = {};
       for (const field of result.fields) {
-        if (field.defaultValue !== undefined && field.kind !== "image") values[field.key] = field.defaultValue;
+        if (field.defaultValue !== undefined && field.kind !== "image")
+          values[field.key] = field.defaultValue;
       }
       try {
         localStorage.setItem(
@@ -531,7 +537,9 @@ export const useStudio = create<StudioState>((set, get) => ({
     const state = get();
     if (state.busy) return;
     const prompt = state.prompt.trim();
-    const upscale = state.catalogFields.some((field) => field.key === "scale" || field.key === "face_enhance");
+    const upscale = state.catalogFields.some(
+      (field) => field.key === "scale" || field.key === "face_enhance",
+    );
     if (!prompt && !(upscale && state.refs.length > 0 && !isGrokModel(state.catalogId))) {
       toast.error("Escreve um prompt.");
       return;
@@ -748,11 +756,7 @@ export const useStudio = create<StudioState>((set, get) => ({
 
 type GetState = () => StudioState;
 
-async function runCatalog(
-  state: StudioState,
-  set: SetState,
-  get: GetState,
-) {
+async function runCatalog(state: StudioState, set: SetState, get: GetState) {
   if (state.catalogOfficial === false) {
     const ok = window.confirm(
       "Modelo da comunidade. O preço e o comportamento podem variar. Queres gerar na mesma?",
@@ -786,6 +790,37 @@ async function runCatalog(
       return;
     }
     const id = newId();
+    if (started.url) {
+      const blobUrl = await cacheRemoteMedia(id, started.url);
+      const item: GalleryItem = {
+        id,
+        kind: started.kind,
+        prompt: state.prompt.trim(),
+        enhancedPrompt: state.prompt.trim(),
+        aspectRatio: String(state.catalogValues.aspect_ratio || "1:1"),
+        resolution: String(state.catalogValues.resolution || state.catalogValues.megapixels || ""),
+        url: blobUrl || started.url,
+        createdAt: Date.now(),
+        status: "done",
+        progress: 100,
+        provider: state.catalogId.startsWith("hf:") ? "huggingface" : "replicate",
+        modelId: state.catalogId,
+        modelName: state.catalogName,
+      };
+      set((s) => {
+        const gallery = [item, ...s.gallery].slice(0, 48);
+        persist(gallery);
+        return { gallery, selectedId: id, busy: false, busyLabel: "" };
+      });
+      toast.success(started.kind === "image" ? "Imagem pronta." : "Vídeo pronto.");
+      return;
+    }
+    if (!started.requestId) {
+      const error = "A geração não devolveu um pedido.";
+      set({ busy: false, busyLabel: "", error });
+      toast.error(error);
+      return;
+    }
     const item: GalleryItem = {
       id,
       kind: started.kind,
@@ -871,7 +906,13 @@ async function pollUntilDone(id: string, requestId: string, set: SetState, get: 
         set((s) => ({
           gallery: s.gallery.map((g) =>
             g.id === id
-              ? { ...g, url: result.url!, remoteUrl: result.url, progress: 40, status: "pending" as const }
+              ? {
+                  ...g,
+                  url: result.url!,
+                  remoteUrl: result.url,
+                  progress: 40,
+                  status: "pending" as const,
+                }
               : g,
           ),
         }));
@@ -881,7 +922,9 @@ async function pollUntilDone(id: string, requestId: string, set: SetState, get: 
             action: "generate",
             aspectRatio: (item.aspectRatio as VideoAspectRatio) || "16:9",
             resolution:
-              item.resolution === "480p" || item.resolution === "1080p" || item.resolution === "720p"
+              item.resolution === "480p" ||
+              item.resolution === "1080p" ||
+              item.resolution === "720p"
                 ? item.resolution
                 : "720p",
             duration: item.duration || 6,

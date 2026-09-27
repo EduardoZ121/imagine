@@ -6,9 +6,57 @@ export type HfModel = CatalogModel & {
   task: HfTask;
   providerId: string;
   needsImage: boolean;
+  endpoint?: {
+    env: string;
+    fallbackUrl: string;
+  };
 };
 
 export const HF_MODELS: HfModel[] = [
+  {
+    id: "hf:John6666/big-asp-v2-sdxl",
+    provider: "huggingface",
+    owner: "John6666",
+    name: "big-asp-v2-sdxl",
+    displayName: "BigASP v2",
+    description:
+      "Modelo SDXL da comunidade para adultos (18+). Texto para imagem; a primeira geração pode demorar enquanto a GPU inicia.",
+    type: "image",
+    tags: ["image", "sdxl", "18+"],
+    official: false,
+    supportsLora: false,
+    followsPrompt: true,
+    pricingLabel: "Endpoint dedicado Hugging Face",
+    task: "text-to-image",
+    providerId: "John6666/big-asp-v2-sdxl",
+    needsImage: false,
+    endpoint: {
+      env: "HF_BIGASP_ENDPOINT_URL",
+      fallbackUrl: "https://6ab925d18392dd29385ec956.endpoints.huggingface.cloud",
+    },
+  },
+  {
+    id: "hf:John6666/lustify-sdxl-nsfwsfw-v2-sdxl",
+    provider: "huggingface",
+    owner: "John6666",
+    name: "lustify-sdxl-nsfwsfw-v2-sdxl",
+    displayName: "Lustify SDXL v2",
+    description:
+      "Modelo SDXL da comunidade para adultos (18+). Texto para imagem com detalhe fotográfico.",
+    type: "image",
+    tags: ["image", "sdxl", "18+"],
+    official: false,
+    supportsLora: false,
+    followsPrompt: true,
+    pricingLabel: "Endpoint dedicado Hugging Face",
+    task: "text-to-image",
+    providerId: "John6666/lustify-sdxl-nsfwsfw-v2-sdxl",
+    needsImage: false,
+    endpoint: {
+      env: "HF_LUSTIFY_ENDPOINT_URL",
+      fallbackUrl: "https://6ab925d18392dd29385ec955.endpoints.huggingface.cloud",
+    },
+  },
   {
     id: "hf:black-forest-labs/FLUX.1-schnell",
     provider: "huggingface",
@@ -224,9 +272,27 @@ function guidanceField(): ModelField {
 
 export function hfFields(model: HfModel): ModelField[] {
   const usesPhoto = model.task === "image-to-image" || model.task === "image-to-video";
-  const guided = model.providerId.includes("qwen-image") || model.providerId.includes("kontext");
-  const fields: ModelField[] = [aspectField(model.task !== "text-to-image" && !usesPhoto, usesPhoto), qualityField()];
+  const guided =
+    Boolean(model.endpoint) ||
+    model.providerId.includes("qwen-image") ||
+    model.providerId.includes("kontext");
+  const fields: ModelField[] = [
+    aspectField(model.task !== "text-to-image" && !usesPhoto, usesPhoto),
+    qualityField(),
+  ];
   if (guided) fields.push(guidanceField());
+  if (model.endpoint) {
+    fields.push({
+      key: "negative_prompt",
+      label: "Evitar na imagem",
+      kind: "string",
+      required: false,
+      description: "Elementos, defeitos ou estilos que não devem aparecer.",
+      defaultValue: "low quality, blurry, deformed, extra fingers, watermark, text",
+      prominent: false,
+      lora: false,
+    });
+  }
   if (usesPhoto) {
     fields.push({
       key: "keep_subject",

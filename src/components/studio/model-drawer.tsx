@@ -14,6 +14,19 @@ const FILTERS = [
   { id: "lora", label: "LoRA" },
 ] as const;
 
+function capabilityLabel(model: CatalogModel): string {
+  if (model.provider === "huggingface") {
+    const task = HF_MODELS.find((item) => item.id === model.id)?.task;
+    if (task === "image-to-image") return "Foto → imagem";
+    if (task === "image-to-video") return "Foto → vídeo";
+    if (task === "text-to-video") return "Texto → vídeo";
+    return "Texto → imagem";
+  }
+  if (model.type === "video") return "Vídeo";
+  if (model.type === "upscale") return "Upscale";
+  return "Imagem";
+}
+
 export function ModelDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [source, setSource] = useState<"replicate" | "huggingface">("replicate");
   const [query, setQuery] = useState("");
@@ -59,7 +72,8 @@ export function ModelDrawer({ open, onClose }: { open: boolean; onClose: () => v
       if (filter === "all") return true;
       return model.type === filter;
     }
-    if (model.id === GROK_MODEL_ID) return filter === "all" || filter === "image" || filter === "video";
+    if (model.id === GROK_MODEL_ID)
+      return filter === "all" || filter === "image" || filter === "video";
     if (filter === "lora") return model.supportsLora;
     if (filter === "all") return true;
     return model.type === filter;
@@ -69,131 +83,173 @@ export function ModelDrawer({ open, onClose }: { open: boolean; onClose: () => v
   const timed = gallery.filter((item) => typeof item.runtimeSeconds === "number");
 
   return (
-    <div className="fixed inset-0 z-40 flex flex-col bg-bg" role="dialog" aria-label="Modelos">
-      <div className="flex h-12 shrink-0 items-center justify-between px-3">
-        <p className="text-sm font-medium">Modelo</p>
-        <button type="button" aria-label="Fechar" onClick={onClose} className="flex size-10 items-center justify-center">
-          <X className="size-5" />
-        </button>
-      </div>
-      <div className="px-3">
-        <div className="mb-2 grid grid-cols-2 gap-1 rounded-full bg-surface p-1">
+    <div className="fixed inset-0 z-40 bg-black/70 sm:p-3" onClick={onClose}>
+      <div
+        className="ml-auto flex h-full w-full flex-col bg-bg shadow-2xl sm:max-w-xl sm:rounded-2xl sm:ring-1 sm:ring-border"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Modelos"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex h-14 shrink-0 items-center justify-between px-4">
+          <div>
+            <p className="text-sm font-semibold">Escolher modelo</p>
+            <p className="text-xs text-subtle">Confirma o tipo de entrada antes de gerar.</p>
+          </div>
           <button
             type="button"
-            onClick={() => setSource("replicate")}
-            className={cn(
-              "h-9 rounded-full text-sm font-medium",
-              source === "replicate" ? "bg-accent text-accent-fg" : "text-muted",
-            )}
+            aria-label="Fechar"
+            onClick={onClose}
+            className="flex size-11 items-center justify-center rounded-full hover:bg-surface"
           >
-            Replicate
-          </button>
-          <button
-            type="button"
-            onClick={() => setSource("huggingface")}
-            className={cn(
-              "h-9 rounded-full text-sm font-medium",
-              source === "huggingface" ? "bg-accent text-accent-fg" : "text-muted",
-            )}
-          >
-            Hugging Face
+            <X className="size-5" />
           </button>
         </div>
-        <label className="flex h-11 items-center gap-2 rounded-xl bg-surface px-3">
-          <Search className="size-4 text-subtle" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Procurar modelos"
-            className="w-full bg-transparent text-sm outline-none placeholder:text-subtle"
-          />
-        </label>
-        <div className="mt-2 flex gap-1.5 overflow-x-auto pb-2 scrollbar-thin">
-          {FILTERS.map((item) => (
+        <div className="px-3">
+          <div className="mb-2 grid grid-cols-2 gap-1 rounded-full bg-surface p-1">
             <button
-              key={item.id}
               type="button"
-              onClick={() => setFilter(item.id)}
+              onClick={() => setSource("replicate")}
               className={cn(
-                "h-9 shrink-0 rounded-full px-3 text-sm",
-                filter === item.id ? "bg-accent text-accent-fg" : "bg-surface text-muted",
+                "h-9 rounded-full text-sm font-medium",
+                source === "replicate" ? "bg-accent text-accent-fg" : "text-muted",
               )}
             >
-              {item.label}
+              Replicate
             </button>
-          ))}
-        </div>
-      </div>
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-4">
-        {loading && source === "replicate" && (
-          <div className="flex justify-center py-6">
-            <Loader2 className="size-5 animate-spin text-subtle" />
-          </div>
-        )}
-        {[...favoriteModels, ...rest].map((model) => (
-          <article key={model.id} className="flex gap-3 rounded-2xl bg-surface p-3">
-            <div className="size-16 shrink-0 overflow-hidden rounded-xl bg-surface-2">
-              {model.thumbnail ? (
-                <img src={model.thumbnail} alt="" className="size-full object-cover" />
-              ) : (
-                <div className="flex size-full items-center justify-center text-xs text-subtle">
-                  {model.provider === "grok" ? "Grok" : model.provider === "huggingface" ? "HF" : model.owner.slice(0, 2).toUpperCase()}
-                </div>
+            <button
+              type="button"
+              onClick={() => setSource("huggingface")}
+              className={cn(
+                "h-9 rounded-full text-sm font-medium",
+                source === "huggingface" ? "bg-accent text-accent-fg" : "text-muted",
               )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium capitalize">{model.displayName}</p>
-                  <p className="truncate text-xs text-subtle">
-                    {model.provider === "grok" ? "Predefinido" : model.provider === "huggingface" ? "Hugging Face" : model.owner}
-                    {model.official === true ? " · Oficial" : ""}
-                    {model.official === false ? " · Comunidade" : ""}
-                  </p>
-                </div>
-                {model.id !== GROK_MODEL_ID && (
-                  <button
-                    type="button"
-                    aria-label="Favorito"
-                    onClick={() => toggleFavorite(model.id)}
-                    className="flex size-8 shrink-0 items-center justify-center"
-                  >
-                    <Star className={cn("size-4", favorites.includes(model.id) ? "fill-fg text-fg" : "text-subtle")} />
-                  </button>
-                )}
-              </div>
-              <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted">{model.description}</p>
-              <p className="mt-1 text-xs text-subtle">{model.pricingLabel}</p>
-              {model.type === "upscale" || model.followsPrompt === false ? (
-                <p className="text-xs text-muted">Só aumenta a nitidez. Não segue o prompt.</p>
-              ) : null}
+            >
+              Hugging Face
+            </button>
+          </div>
+          <label className="flex h-11 items-center gap-2 rounded-xl bg-surface px-3">
+            <Search className="size-4 text-subtle" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Procurar modelos"
+              className="w-full bg-transparent text-sm outline-none placeholder:text-subtle"
+            />
+          </label>
+          <div className="mt-2 flex gap-1.5 overflow-x-auto pb-2 scrollbar-thin">
+            {FILTERS.map((item) => (
               <button
+                key={item.id}
                 type="button"
-                onClick={() => {
-                  void setCatalogModel(model.id);
-                  onClose();
-                }}
+                onClick={() => setFilter(item.id)}
+                aria-pressed={filter === item.id}
                 className={cn(
-                  "mt-2 h-9 rounded-full px-3 text-sm font-medium",
-                  catalogId === model.id ? "bg-accent text-accent-fg" : "bg-surface-2 text-fg",
+                  "h-9 shrink-0 rounded-full px-3 text-sm",
+                  filter === item.id ? "bg-accent text-accent-fg" : "bg-surface text-muted",
                 )}
               >
-                {catalogId === model.id ? "Em uso" : "Usar modelo"}
+                {item.label}
               </button>
+            ))}
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-4">
+          {source === "huggingface" && (
+            <p className="rounded-xl border border-border bg-surface px-3 py-2 text-xs leading-relaxed text-muted">
+              Modelos 18+ aceitam apenas adultos e conteúdo consensual. Modelos de texto não usam a
+              foto anexada.
+            </p>
+          )}
+          {loading && source === "replicate" && (
+            <div className="flex justify-center py-6">
+              <Loader2 className="size-5 animate-spin text-subtle" />
             </div>
-          </article>
-        ))}
-        {!loading && shown.length === 0 && (
-          <p className="py-8 text-center text-sm text-muted">Nenhum modelo com este filtro.</p>
-        )}
-      </div>
-      <div className="shrink-0 border-t border-border px-4 py-3 text-xs leading-relaxed text-subtle">
-        <p>{gallery.length} gerações neste aparelho.</p>
-        <p>
-          {timed.length
-            ? `Último tempo de execução registado: ${timed[0]?.runtimeSeconds?.toFixed(1)}s.`
-            : "Custo em dólares: a API não devolve o preço. Não inventamos um valor."}
-        </p>
+          )}
+          {[...favoriteModels, ...rest].map((model) => (
+            <article key={model.id} className="flex gap-3 rounded-2xl bg-surface p-3">
+              <div className="size-16 shrink-0 overflow-hidden rounded-xl bg-surface-2">
+                {model.thumbnail ? (
+                  <img src={model.thumbnail} alt="" className="size-full object-cover" />
+                ) : (
+                  <div className="flex size-full items-center justify-center text-xs text-subtle">
+                    {model.provider === "grok"
+                      ? "Grok"
+                      : model.provider === "huggingface"
+                        ? "HF"
+                        : model.owner.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium capitalize">{model.displayName}</p>
+                    <p className="truncate text-xs text-subtle">
+                      {model.provider === "grok"
+                        ? "Predefinido"
+                        : model.provider === "huggingface"
+                          ? "Hugging Face"
+                          : model.owner}
+                      {model.official === true ? " · Oficial" : ""}
+                      {model.official === false ? " · Comunidade" : ""}
+                    </p>
+                    <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-muted">
+                      {capabilityLabel(model)}
+                      {model.tags.includes("18+") ? " · 18+" : ""}
+                    </p>
+                  </div>
+                  {model.id !== GROK_MODEL_ID && (
+                    <button
+                      type="button"
+                      aria-label="Favorito"
+                      onClick={() => toggleFavorite(model.id)}
+                      className="flex size-8 shrink-0 items-center justify-center"
+                    >
+                      <Star
+                        className={cn(
+                          "size-4",
+                          favorites.includes(model.id) ? "fill-fg text-fg" : "text-subtle",
+                        )}
+                      />
+                    </button>
+                  )}
+                </div>
+                <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted">
+                  {model.description}
+                </p>
+                <p className="mt-1 text-xs text-subtle">{model.pricingLabel}</p>
+                {model.type === "upscale" || model.followsPrompt === false ? (
+                  <p className="text-xs text-muted">Só aumenta a nitidez. Não segue o prompt.</p>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    void setCatalogModel(model.id);
+                    onClose();
+                  }}
+                  className={cn(
+                    "mt-2 h-9 rounded-full px-3 text-sm font-medium",
+                    catalogId === model.id ? "bg-accent text-accent-fg" : "bg-surface-2 text-fg",
+                  )}
+                >
+                  {catalogId === model.id ? "Em uso" : "Usar modelo"}
+                </button>
+              </div>
+            </article>
+          ))}
+          {!loading && shown.length === 0 && (
+            <p className="py-8 text-center text-sm text-muted">Nenhum modelo com este filtro.</p>
+          )}
+        </div>
+        <div className="shrink-0 border-t border-border px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-xs leading-relaxed text-subtle">
+          <p>{gallery.length} gerações neste aparelho.</p>
+          <p>
+            {timed.length
+              ? `Último tempo de execução registado: ${timed[0]?.runtimeSeconds?.toFixed(1)}s.`
+              : "Custo em dólares: a API não devolve o preço. Não inventamos um valor."}
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -208,7 +264,9 @@ export function CatalogFields() {
   const [open, setOpen] = useState<string | null>(null);
   const loraFields = fields.filter((field) => field.lora);
   const prominent = fields.filter((field) => field.prominent && !field.lora);
-  const rest = fields.filter((field) => !field.prominent && !field.lora && field.kind !== "image" && field.kind !== "video");
+  const rest = fields.filter(
+    (field) => !field.prominent && !field.lora && field.kind !== "image" && field.kind !== "video",
+  );
   const upscale = fields.some((field) => field.key === "scale" || field.key === "face_enhance");
   const opened = prominent.find((field) => field.key === open);
 
@@ -229,10 +287,20 @@ export function CatalogFields() {
           {open === "more" && (
             <div className="space-y-2">
               {rest.map((field) => (
-                <Field key={field.key} field={field} value={values[field.key]} onChange={setCatalogValue} />
+                <Field
+                  key={field.key}
+                  field={field}
+                  value={values[field.key]}
+                  onChange={setCatalogValue}
+                />
               ))}
               {loraFields.map((field) => (
-                <Field key={field.key} field={field} value={values[field.key]} onChange={setCatalogValue} />
+                <Field
+                  key={field.key}
+                  field={field}
+                  value={values[field.key]}
+                  onChange={setCatalogValue}
+                />
               ))}
             </div>
           )}
@@ -273,7 +341,9 @@ export function CatalogFields() {
         </button>
       </div>
       {upscale && <p className="mt-1 px-1 text-[11px] text-subtle">Só aumenta a nitidez.</p>}
-      {official === false && <p className="mt-1 px-1 text-[11px] text-subtle">Modelo da comunidade.</p>}
+      {official === false && (
+        <p className="mt-1 px-1 text-[11px] text-subtle">Modelo da comunidade.</p>
+      )}
     </div>
   );
 }
@@ -334,8 +404,26 @@ function FieldChoices({
     const on = value === true;
     return (
       <div className="grid grid-cols-2 gap-1">
-        <button type="button" onClick={() => onChange(field.key, true)} className={cn("h-9 rounded-lg text-sm", on ? "bg-accent text-accent-fg" : "bg-surface-3 text-muted")}>Ligado</button>
-        <button type="button" onClick={() => onChange(field.key, false)} className={cn("h-9 rounded-lg text-sm", !on ? "bg-accent text-accent-fg" : "bg-surface-3 text-muted")}>Desligado</button>
+        <button
+          type="button"
+          onClick={() => onChange(field.key, true)}
+          className={cn(
+            "h-9 rounded-lg text-sm",
+            on ? "bg-accent text-accent-fg" : "bg-surface-3 text-muted",
+          )}
+        >
+          Ligado
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange(field.key, false)}
+          className={cn(
+            "h-9 rounded-lg text-sm",
+            !on ? "bg-accent text-accent-fg" : "bg-surface-3 text-muted",
+          )}
+        >
+          Desligado
+        </button>
       </div>
     );
   }
@@ -374,7 +462,9 @@ function Field({
   if (field.kind === "image" || field.kind === "video") {
     return (
       <p className="text-xs text-muted">
-        {field.kind === "video" ? "Anexa um vídeo com o clipe." : "Anexa a foto com o clipe. Este modelo usa essa imagem."}
+        {field.kind === "video"
+          ? "Anexa um vídeo com o clipe."
+          : "Anexa a foto com o clipe. Este modelo usa essa imagem."}
         {field.required ? " Obrigatório." : ""}
       </p>
     );

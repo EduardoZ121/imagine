@@ -1,5 +1,10 @@
 import { replicateAuthorization } from "./xai.server";
-import { GROK_CATALOG_MODEL, type CatalogModel, type CatalogType, type ModelField } from "./catalog";
+import {
+  GROK_CATALOG_MODEL,
+  type CatalogModel,
+  type CatalogType,
+  type ModelField,
+} from "./catalog";
 import { hfFields, hfModel } from "./hf";
 import { startHfModel } from "./hf.server";
 
@@ -7,7 +12,16 @@ const REPLICATE = "https://api.replicate.com/v1";
 const CACHE_MS = 15 * 60 * 1000;
 const MODEL_ID = /^[a-z0-9][a-z0-9-]{0,80}\/[a-z0-9][a-z0-9._-]{0,80}$/i;
 
-const FEATURED = ["flux", "ideogram", "recraft", "qwen image", "wan video", "ltx video", "seedance", "upscaler"];
+const FEATURED = [
+  "flux",
+  "ideogram",
+  "recraft",
+  "qwen image",
+  "wan video",
+  "ltx video",
+  "seedance",
+  "upscaler",
+];
 
 type RawModel = {
   owner?: string;
@@ -49,7 +63,9 @@ function explainValidation(raw: string): string {
       invalid_fields?: { description?: string; type?: string }[];
     };
     const bits = [
-      ...(json.invalid_fields || []).map((field) => `${field.type || ""} ${field.description || ""}`),
+      ...(json.invalid_fields || []).map(
+        (field) => `${field.type || ""} ${field.description || ""}`,
+      ),
       typeof json.detail === "string" ? json.detail : "",
     ]
       .join(" ")
@@ -78,9 +94,11 @@ function thumb(url?: string | null): string | undefined {
 
 function classify(tags: string[], name: string, description = ""): CatalogType {
   const blob = `${tags.join(" ")} ${name} ${description}`.toLowerCase();
-  if (blob.includes("upscal") || blob.includes("esrgan") || blob.includes("gfpgan")) return "upscale";
+  if (blob.includes("upscal") || blob.includes("esrgan") || blob.includes("gfpgan"))
+    return "upscale";
   if (blob.includes("video") || blob.includes("seedance")) return "video";
-  if (blob.includes("image") || blob.includes("flux") || blob.includes("text-to-image")) return "image";
+  if (blob.includes("image") || blob.includes("flux") || blob.includes("text-to-image"))
+    return "image";
   return "other";
 }
 
@@ -137,7 +155,9 @@ async function featured(): Promise<CatalogModel[]> {
       if (!map.has(model.id)) map.set(model.id, model);
     }
   }
-  const models = [...map.values()].sort((a, b) => (b.runCount || 0) - (a.runCount || 0)).slice(0, 48);
+  const models = [...map.values()]
+    .sort((a, b) => (b.runCount || 0) - (a.runCount || 0))
+    .slice(0, 48);
   featuredCache = { at: Date.now(), models };
   return models;
 }
@@ -149,8 +169,12 @@ export async function searchCatalog(query?: string): Promise<CatalogModel[]> {
     const models = await featured();
     return grokHit ? [GROK_CATALOG_MODEL, ...models] : models;
   }
-  const found = (await searchRaw(q)).sort((a, b) => (b.runCount || 0) - (a.runCount || 0)).slice(0, 24);
-  return grokHit ? [GROK_CATALOG_MODEL, ...found.filter((m) => m.id !== GROK_CATALOG_MODEL.id)] : found;
+  const found = (await searchRaw(q))
+    .sort((a, b) => (b.runCount || 0) - (a.runCount || 0))
+    .slice(0, 24);
+  return grokHit
+    ? [GROK_CATALOG_MODEL, ...found.filter((m) => m.id !== GROK_CATALOG_MODEL.id)]
+    : found;
 }
 
 type SchemaProp = {
@@ -175,7 +199,12 @@ function resolveSpec(
   const name = ref.split("/").pop() || "";
   const target = schemas[name];
   if (!target) return spec;
-  return { ...target, description: spec.description || target.description, default: spec.default ?? target.default, title: spec.title || target.title };
+  return {
+    ...target,
+    description: spec.description || target.description,
+    default: spec.default ?? target.default,
+    title: spec.title || target.title,
+  };
 }
 
 function fieldKind(key: string, spec: SchemaProp): ModelField["kind"] | undefined {
@@ -189,7 +218,8 @@ function fieldKind(key: string, spec: SchemaProp): ModelField["kind"] | undefine
   ) {
     return "image";
   }
-  if (spec.format === "uri" && /image|img|frame/.test(keyName) && !/video/.test(keyName)) return "image";
+  if (spec.format === "uri" && /image|img|frame/.test(keyName) && !/video/.test(keyName))
+    return "image";
   if (Array.isArray(spec.enum) && spec.enum.length) return "enum";
   if (spec.type === "integer") return "integer";
   if (spec.type === "number") return "number";
@@ -198,7 +228,9 @@ function fieldKind(key: string, spec: SchemaProp): ModelField["kind"] | undefine
   return undefined;
 }
 
-export async function describeModel(modelId: string): Promise<
+export async function describeModel(
+  modelId: string,
+): Promise<
   | { ok: true; model: CatalogModel; fields: ModelField[]; versionId?: string }
   | { ok: false; error: string }
 > {
@@ -215,7 +247,10 @@ export async function describeModel(modelId: string): Promise<
     latest_version?: {
       openapi_schema?: {
         components?: {
-          schemas?: Record<string, SchemaProp & { properties?: Record<string, SchemaProp>; required?: string[] }>;
+          schemas?: Record<
+            string,
+            SchemaProp & { properties?: Record<string, SchemaProp>; required?: string[] }
+          >;
         };
       };
     };
@@ -246,14 +281,20 @@ export async function describeModel(modelId: string): Promise<
       minimum: typeof spec.minimum === "number" ? spec.minimum : undefined,
       maximum: typeof spec.maximum === "number" ? spec.maximum : undefined,
       defaultValue:
-        typeof fallback === "string" || typeof fallback === "number" || typeof fallback === "boolean"
+        typeof fallback === "string" ||
+        typeof fallback === "number" ||
+        typeof fallback === "boolean"
           ? fallback
           : undefined,
       multiple: spec.type === "array",
-      numeric: Array.isArray(spec.enum) && spec.enum.length > 0 && spec.enum.every((item) => typeof item === "number"),
-      prominent: /^(duration|aspect_ratio|resolution|quality|output_quality|megapixels|generate_audio|output_format)$/.test(
-        key,
-      ),
+      numeric:
+        Array.isArray(spec.enum) &&
+        spec.enum.length > 0 &&
+        spec.enum.every((item) => typeof item === "number"),
+      prominent:
+        /^(duration|aspect_ratio|resolution|quality|output_quality|megapixels|generate_audio|output_format)$/.test(
+          key,
+        ),
       lora: /lora/i.test(key),
     });
   }
@@ -269,7 +310,8 @@ export async function describeModel(modelId: string): Promise<
 }
 
 function allowedMedia(value: string): boolean {
-  if (value.startsWith("data:image/") || value.startsWith("data:video/")) return value.length < 8_000_000;
+  if (value.startsWith("data:image/") || value.startsWith("data:video/"))
+    return value.length < 8_000_000;
   try {
     const url = new URL(value);
     return url.protocol === "https:";
@@ -306,7 +348,10 @@ export async function startCatalogModel(input: {
   imageUrl?: string;
   lastFrameUrl?: string;
   videoUrl?: string;
-}): Promise<{ ok: true; requestId: string; kind: "image" | "video" } | { ok: false; error: string }> {
+}): Promise<
+  | { ok: true; requestId?: string; url?: string; kind: "image" | "video" }
+  | { ok: false; error: string }
+> {
   if (hfModel(input.modelId)) return startHfModel(input);
   const described = await describeModel(input.modelId);
   if (!described.ok) return described;
@@ -316,23 +361,33 @@ export async function startCatalogModel(input: {
   if (upscale && prompt && !/nitidez|upscale|resolu|qualidade|aumentar/i.test(prompt)) {
     return {
       ok: false,
-      error: "Este modelo só aumenta a nitidez. Não lê o texto e não muda a roupa. Crédito não foi gasto.",
+      error:
+        "Este modelo só aumenta a nitidez. Não lê o texto e não muda a roupa. Crédito não foi gasto.",
     };
   }
   if (input.imageUrl) {
     if (input.imageUrl.startsWith("data:") && input.imageUrl.length >= 8_000_000) {
-      return { ok: false, error: "A foto é grande demais. Escolhe uma mais leve. Crédito não foi gasto." };
+      return {
+        ok: false,
+        error: "A foto é grande demais. Escolhe uma mais leve. Crédito não foi gasto.",
+      };
     }
     if (!allowedMedia(input.imageUrl)) {
-      return { ok: false, error: "O envio da foto falhou. Anexa a imagem outra vez. Crédito não foi gasto." };
+      return {
+        ok: false,
+        error: "O envio da foto falhou. Anexa a imagem outra vez. Crédito não foi gasto.",
+      };
     }
   }
   const payload: Record<string, unknown> = upscale || !prompt ? {} : { prompt };
-  const imageFields = described.fields.filter((field) => field.kind === "image" && !/mask/.test(field.key));
+  const imageFields = described.fields.filter(
+    (field) => field.kind === "image" && !/mask/.test(field.key),
+  );
   if (input.imageUrl && imageFields.length === 0 && described.model.followsPrompt !== false) {
     return {
       ok: false,
-      error: "Este modelo ignora a foto. Para mudar a imagem, escolhe Flux Kontext. Crédito não foi gasto.",
+      error:
+        "Este modelo ignora a foto. Para mudar a imagem, escolhe Flux Kontext. Crédito não foi gasto.",
     };
   }
   const imageField = imageFields.find((field) => field.required) || imageFields[0];
@@ -347,7 +402,8 @@ export async function startCatalogModel(input: {
     const primary =
       imageFields.find((field) =>
         /^(image|input_image|img_cond_path|start_image|first_frame|init_image)$/.test(field.key),
-      ) || imageFields.find((field) => !/last|reference|ref_/.test(field.key)) ||
+      ) ||
+      imageFields.find((field) => !/last|reference|ref_/.test(field.key)) ||
       imageFields[0];
     if (!primary) {
       return {
@@ -356,12 +412,15 @@ export async function startCatalogModel(input: {
       };
     }
     payload[primary.key] = primary.multiple ? [input.imageUrl] : input.imageUrl;
-    const lastField = imageFields.find((field) => /last/.test(field.key) && field.key !== primary.key);
+    const lastField = imageFields.find(
+      (field) => /last/.test(field.key) && field.key !== primary.key,
+    );
     if (lastField && input.lastFrameUrl && allowedMedia(input.lastFrameUrl)) {
       payload[lastField.key] = input.lastFrameUrl;
     }
   }
-  if (videoField && input.videoUrl && allowedMedia(input.videoUrl)) payload[videoField.key] = input.videoUrl;
+  if (videoField && input.videoUrl && allowedMedia(input.videoUrl))
+    payload[videoField.key] = input.videoUrl;
   for (const field of described.fields) {
     if (field.kind === "image" || field.kind === "video") continue;
     const raw = input.values[field.key];
