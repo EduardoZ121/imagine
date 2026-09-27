@@ -48,6 +48,7 @@ function stepsFor(model: HfModel, quality: string): number {
 }
 
 function guidanceFor(model: HfModel, fidelity: string): number {
+  if (model.providerId.includes("kontext")) return fidelity === "Baixa" ? 2 : fidelity === "Alta" ? 3.5 : 2.5;
   if (model.task === "image-to-image") return fidelity === "Baixa" ? 3.5 : fidelity === "Alta" ? 6.5 : 4.5;
   return fidelity === "Baixa" ? 2 : fidelity === "Alta" ? 5 : 3.5;
 }
@@ -77,14 +78,49 @@ function payloadFor(model: HfModel, prompt: string, values: Record<string, strin
       num_frames: 81,
     };
   }
-  if (model.task === "image-to-image") {
-    const body: Record<string, unknown> = {
-      prompt: editPrompt(prompt, keep),
+  if (model.task === "image-to-video") {
+    const instruction = editPrompt(prompt, keep);
+    if (model.providerId.includes("ltx")) {
+      return {
+        prompt: instruction,
+        image_url: imageUrl,
+        num_frames: quality === "Rápida" ? 73 : 121,
+        video_size: "auto",
+        image_strength: 1,
+        enable_prompt_expansion: false,
+        generate_audio: false,
+        video_quality: quality === "Rápida" ? "medium" : "high",
+        acceleration: quality === "Alta" ? "none" : "regular",
+      };
+    }
+    const ratio = aspect === "16:9" || aspect === "9:16" || aspect === "1:1" ? aspect : "auto";
+    return {
+      prompt: instruction,
       image_url: imageUrl,
+      resolution: quality === "Rápida" ? "480p" : "720p",
+      aspect_ratio: ratio,
+      num_frames: 81,
+    };
+  }
+  if (model.task === "image-to-image") {
+    const instruction = editPrompt(prompt, keep);
+    if (model.providerId.includes("kontext")) {
+      return {
+        prompt: instruction,
+        image_url: imageUrl,
+        num_inference_steps: quality === "Rápida" ? 20 : quality === "Equilibrada" ? 28 : 35,
+        guidance_scale: guidanceFor(model, guidance),
+        resolution_mode: aspect === "16:9" || aspect === "9:16" || aspect === "1:1" ? aspect : "match_input",
+        output_format: "jpeg",
+      };
+    }
+    const body: Record<string, unknown> = {
+      prompt: instruction,
       image_urls: imageUrl ? [imageUrl] : undefined,
       num_inference_steps: stepsFor(model, quality),
       output_format: "jpeg",
     };
+    if (!model.providerId.includes("klein")) body.image_url = imageUrl;
     if (size) body.image_size = size;
     if (model.providerId.includes("qwen-image")) {
       body.guidance_scale = guidanceFor(model, guidance);
@@ -122,6 +158,12 @@ export async function startHfModel(input: {
   if (model.needsImage && !input.imageUrl) {
     return { ok: false, error: "Este modelo precisa de uma foto. Anexa uma imagem. Crédito não foi gasto." };
   }
+  if (!model.needsImage && input.imageUrl) {
+    return {
+      ok: false,
+      error: "Este modelo ignora a foto e inventa outra pessoa. Escolhe Qwen Image Edit, FLUX Kontext ou FLUX.2 Klein. Crédito não foi gasto.",
+    };
+  }
   const url = `${ROUTER}/${model.providerId}?_subdomain=queue`;
   let response: Response;
   try {
@@ -154,13 +196,13 @@ export async function startHfModel(input: {
   const ticket = Buffer.from(
     JSON.stringify({
       path,
-      kind: model.task === "text-to-video" ? "video" : "image",
+      kind: model.task === "text-to-image" || model.task === "image-to-image" ? "image" : "video",
     }),
   ).toString("base64url");
   return {
     ok: true,
     requestId: `hf:${ticket}`,
-    kind: model.task === "text-to-video" ? "video" : "image",
+    kind: model.task === "text-to-image" || model.task === "image-to-image" ? "image" : "video",
   };
 }
 

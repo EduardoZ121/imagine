@@ -1,6 +1,6 @@
 import type { CatalogModel, ModelField } from "./catalog";
 
-export type HfTask = "text-to-image" | "image-to-image" | "text-to-video";
+export type HfTask = "text-to-image" | "image-to-image" | "text-to-video" | "image-to-video";
 
 export type HfModel = CatalogModel & {
   task: HfTask;
@@ -100,7 +100,7 @@ export const HF_MODELS: HfModel[] = [
     owner: "Wan-AI",
     name: "Wan2.2-TI2V-5B",
     displayName: "Wan 2.2 5B",
-    description: "Texto para vídeo, cerca de 5 segundos. Licença Apache 2.0. A foto não entra neste endpoint.",
+    description: "Texto para vídeo, cerca de 5 segundos. A foto não entra neste modelo.",
     type: "video",
     tags: ["video"],
     official: true,
@@ -110,6 +110,74 @@ export const HF_MODELS: HfModel[] = [
     task: "text-to-video",
     providerId: "fal-ai/wan/v2.2-5b/text-to-video",
     needsImage: false,
+  },
+  {
+    id: "hf:black-forest-labs/FLUX.1-Kontext-dev",
+    provider: "huggingface",
+    owner: "black-forest-labs",
+    name: "FLUX.1-Kontext-dev",
+    displayName: "FLUX.1 Kontext",
+    description: "Edita a foto e segue a instrução. É o que melhor mantém a pessoa.",
+    type: "image",
+    tags: ["image", "edit"],
+    official: true,
+    supportsLora: false,
+    followsPrompt: true,
+    pricingLabel: "Créditos Hugging Face",
+    task: "image-to-image",
+    providerId: "fal-ai/flux-kontext/dev",
+    needsImage: true,
+  },
+  {
+    id: "hf:black-forest-labs/FLUX.2-klein-9B",
+    provider: "huggingface",
+    owner: "black-forest-labs",
+    name: "FLUX.2-klein-9B",
+    displayName: "FLUX.2 Klein 9B",
+    description: "Edita a foto. Precisa da imagem anexada.",
+    type: "image",
+    tags: ["image", "edit"],
+    official: true,
+    supportsLora: false,
+    followsPrompt: true,
+    pricingLabel: "Créditos Hugging Face",
+    task: "image-to-image",
+    providerId: "fal-ai/flux-2/klein/9b/edit",
+    needsImage: true,
+  },
+  {
+    id: "hf:Wan-AI/Wan2.2-I2V-A14B",
+    provider: "huggingface",
+    owner: "Wan-AI",
+    name: "Wan2.2-I2V-A14B",
+    displayName: "Wan 2.2 I2V",
+    description: "Anima a foto anexada. Sem foto, não gera.",
+    type: "video",
+    tags: ["video"],
+    official: true,
+    supportsLora: false,
+    followsPrompt: true,
+    pricingLabel: "Créditos Hugging Face",
+    task: "image-to-video",
+    providerId: "fal-ai/wan/v2.2-a14b/image-to-video",
+    needsImage: true,
+  },
+  {
+    id: "hf:Lightricks/LTX-2",
+    provider: "huggingface",
+    owner: "Lightricks",
+    name: "LTX-2",
+    displayName: "LTX-2",
+    description: "Anima a foto anexada. O LTX-Video antigo não tem endpoint.",
+    type: "video",
+    tags: ["video"],
+    official: true,
+    supportsLora: false,
+    followsPrompt: true,
+    pricingLabel: "Créditos Hugging Face",
+    task: "image-to-video",
+    providerId: "fal-ai/ltx-2-19b/distilled/image-to-video",
+    needsImage: true,
   },
 ];
 
@@ -155,11 +223,11 @@ function guidanceField(): ModelField {
 }
 
 export function hfFields(model: HfModel): ModelField[] {
-  const edit = model.task === "image-to-image";
-  const qwen = model.providerId.includes("qwen-image") && !model.providerId.includes("klein");
-  const fields: ModelField[] = [aspectField(model.task === "text-to-video", edit), qualityField()];
-  if (qwen) fields.push(guidanceField());
-  if (edit) {
+  const usesPhoto = model.task === "image-to-image" || model.task === "image-to-video";
+  const guided = model.providerId.includes("qwen-image") || model.providerId.includes("kontext");
+  const fields: ModelField[] = [aspectField(model.task !== "text-to-image" && !usesPhoto, usesPhoto), qualityField()];
+  if (guided) fields.push(guidanceField());
+  if (usesPhoto) {
     fields.push({
       key: "keep_subject",
       label: "Manter rosto",
