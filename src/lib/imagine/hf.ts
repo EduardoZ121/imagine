@@ -9,7 +9,7 @@ export type HfModel = CatalogModel & {
   endpoint?: {
     env: string;
     fallbackUrl: string;
-    handler?: "picasso" | "instruct-pix2pix";
+    handler?: "dreamshaper" | "instruct-pix2pix";
   };
 };
 
@@ -38,13 +38,13 @@ export const HF_MODELS: HfModel[] = [
     },
   },
   {
-    id: "hf:aipicasso/picasso-diffusion-1-1",
+    id: "hf:Lykon/dreamshaper-8",
     provider: "huggingface",
-    owner: "aipicasso",
-    name: "picasso-diffusion-1-1",
-    displayName: "Picasso Img2Img",
+    owner: "Lykon",
+    name: "dreamshaper-8",
+    displayName: "DreamShaper 8 Img2Img",
     description:
-      "Transformação livre da foto com controlo da intensidade. Mantém mais da imagem no modo Suave.",
+      "Transformação fotográfica livre com controlo da intensidade. Mantém mais da imagem no modo Suave.",
     type: "image",
     tags: ["image", "edit", "18+"],
     official: false,
@@ -52,12 +52,12 @@ export const HF_MODELS: HfModel[] = [
     followsPrompt: true,
     pricingLabel: "Endpoint dedicado Hugging Face",
     task: "image-to-image",
-    providerId: "aipicasso/picasso-diffusion-1-1",
+    providerId: "Lykon/dreamshaper-8",
     needsImage: true,
     endpoint: {
-      env: "HF_PICASSO_I2I_ENDPOINT_URL",
+      env: "HF_DREAMSHAPER_I2I_ENDPOINT_URL",
       fallbackUrl: "https://6ab9392b9ec415b652acd800.endpoints.huggingface.cloud",
-      handler: "picasso",
+      handler: "dreamshaper",
     },
   },
   {

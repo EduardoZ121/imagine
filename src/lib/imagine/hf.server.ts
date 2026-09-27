@@ -146,7 +146,7 @@ function endpointPayload(
     };
   }
 
-  if (model.endpoint?.handler === "picasso") {
+  if (model.endpoint?.handler === "dreamshaper") {
     return {
       inputs: prompt,
       image: imageBase64,
