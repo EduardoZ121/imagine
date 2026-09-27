@@ -21,7 +21,7 @@ export const HF_MODELS: HfModel[] = [
     name: "imagine-instruct-pix2pix",
     displayName: "InstructPix2Pix",
     description:
-      "Edita a foto seguindo uma instrução directa. Bom para cor, estilo, fundo e alterações localizadas.",
+      "Edita a foto seguindo uma instrução directa. Endpoint dedicado sem filtro do fornecedor.",
     type: "image",
     tags: ["image", "edit", "18+"],
     official: false,
@@ -44,7 +44,7 @@ export const HF_MODELS: HfModel[] = [
     name: "dreamshaper-8",
     displayName: "DreamShaper 8 Img2Img",
     description:
-      "Transformação fotográfica livre com controlo da intensidade. Mantém mais da imagem no modo Suave.",
+      "Reimagina a foto sem filtro do fornecedor. Descreve o resultado final; Suave preserva mais.",
     type: "image",
     tags: ["image", "edit", "18+"],
     official: false,
