@@ -20,7 +20,7 @@ import {
   cancelImagineGeneration,
 } from "./functions";
 import { GROK_MODEL_ID, isGrokModel, type ModelField } from "./catalog";
-import { isDedicatedHfImageEditor } from "./hf";
+import { dedicatedHfEditorMaxPixels, isDedicatedHfImageEditor, resolveHfValues } from "./hf";
 import { cacheRemoteMedia, deleteBlob, getBlob, loadGalleryMeta, saveGalleryMeta } from "./gallery";
 import {
   compressImageFile,
@@ -222,7 +222,9 @@ export const useStudio = create<StudioState>((set, get) => ({
       const hasStart = state.refs.some((item) => item.role === "start");
       const refs = hasStart
         ? state.refs
-        : state.refs.map((item, index) => (index === 0 ? { ...item, role: "start" as const } : item));
+        : state.refs.map((item, index) =>
+            index === 0 ? { ...item, role: "start" as const } : item,
+          );
       set({
         kind,
         refs,
@@ -577,7 +579,8 @@ export const useStudio = create<StudioState>((set, get) => ({
       references = references.slice(1);
     }
     const duration = state.action === "extend" ? state.extendDuration : state.duration;
-    const pinFirstFrame = state.kind === "video" && state.action === "generate" && Boolean(startFrame);
+    const pinFirstFrame =
+      state.kind === "video" && state.action === "generate" && Boolean(startFrame);
 
     set({
       busy: true,
@@ -786,7 +789,9 @@ export const useStudio = create<StudioState>((set, get) => ({
       persist(gallery);
       return { gallery, busy: false, busyLabel: "" };
     });
-    await Promise.all(ids.map((requestId) => cancelImagineGeneration({ data: { requestId } }).catch(() => null)));
+    await Promise.all(
+      ids.map((requestId) => cancelImagineGeneration({ data: { requestId } }).catch(() => null)),
+    );
   },
 }));
 
@@ -801,9 +806,30 @@ async function runCatalog(state: StudioState, set: SetState, get: GetState) {
   }
   set({ busy: true, busyLabel: "A enviar para o modelo…", error: null });
   try {
+    const generationValues = resolveHfValues(
+      state.catalogId,
+      state.prompt.trim(),
+      state.catalogValues,
+    );
+    const unlocked = [
+      ["keep_face", "rosto"],
+      ["keep_body", "corpo"],
+      ["keep_clothes", "roupa"],
+    ]
+      .filter(([key]) => state.catalogValues[key] !== false && generationValues[key] === false)
+      .map(([, label]) => label);
+    if (unlocked.length) {
+      set({ catalogValues: generationValues });
+      toast.message(
+        `${unlocked.join(", ")} desbloqueado automaticamente para não contrariar o prompt.`,
+      );
+    }
     let imageUrl = state.refs.find((ref) => ref.role === "start")?.url || state.refs[0]?.url;
     if (imageUrl && isDedicatedHfImageEditor(state.catalogId)) {
-      imageUrl = await constrainImageForEndpoint(imageUrl);
+      imageUrl = await constrainImageForEndpoint(
+        imageUrl,
+        dedicatedHfEditorMaxPixels(state.catalogId),
+      );
     }
     if (imageUrl && !imageUrl.startsWith("data:image/") && !imageUrl.startsWith("https://")) {
       const error = "O envio da foto falhou. Anexa a imagem outra vez.";
@@ -816,7 +842,7 @@ async function runCatalog(state: StudioState, set: SetState, get: GetState) {
       data: {
         modelId: state.catalogId,
         prompt: state.prompt.trim(),
-        values: state.catalogValues,
+        values: generationValues,
         imageUrl,
         lastFrameUrl,
         videoUrl: state.sourceVideo?.url,

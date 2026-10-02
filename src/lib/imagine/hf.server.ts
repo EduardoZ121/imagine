@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { hfModel, hfSize, isHfModel, maxSteps, type HfModel } from "./hf";
+import { hfModel, hfSize, isHfModel, maxSteps, resolveHfValues, type HfModel } from "./hf";
 
 const ROUTER = "https://router.huggingface.co/fal-ai";
 
@@ -70,17 +70,19 @@ function on(values: Record<string, string | number | boolean>, key: string): boo
 
 function editPrompt(prompt: string, values: Record<string, string | number | boolean>): string {
   const locks = [
-    on(values, "keep_face") ? "the same face" : "",
-    on(values, "keep_body") ? "the same body and pose" : "",
-    on(values, "keep_clothes") ? "the same clothes" : "",
+    on(values, "keep_face") ? "Preserve the exact face and identity" : "",
+    on(values, "keep_body")
+      ? "Preserve the exact framing, camera angle, body proportions, anatomy, limb count and pose"
+      : "",
+    on(values, "keep_clothes") ? "Preserve the same clothes" : "",
   ].filter(Boolean);
   if (!locks.length) return prompt;
-  return `${prompt}. Keep ${locks.join(", ")}.`;
+  return `${prompt}. ${locks.join(". ")}. Keep the subject fully inside the original frame.`;
 }
 
 function guidanceFor(model: HfModel, fidelity: string): number {
-  if (model.endpoint?.handler === "instruct-pix2pix") {
-    return fidelity === "Baixa" ? 5 : fidelity === "Alta" ? 10 : 7.5;
+  if (model.endpoint?.handler === "dreamshaper") {
+    return fidelity === "Baixa" ? 1.5 : fidelity === "Alta" ? 3 : 2;
   }
   if (model.endpoint) return fidelity === "Baixa" ? 4 : fidelity === "Alta" ? 7 : 5.5;
   if (model.providerId.includes("kontext"))
@@ -138,21 +140,8 @@ function endpointPayload(
   const negativePrompt = textOf(
     values,
     "negative_prompt",
-    "low quality, blurry, deformed, extra fingers, watermark, text",
+    "low quality, blurry, cropped, out of frame, distorted anatomy, deformed body, duplicate limbs, extra limbs, missing limbs, twisted torso, malformed hands, extra fingers, fused fingers, watermark, text",
   ).slice(0, 1000);
-
-  if (model.endpoint?.handler === "instruct-pix2pix") {
-    return {
-      inputs: prompt,
-      image: imageBase64,
-      parameters: {
-        num_inference_steps: steps,
-        guidance_scale: guidanceFor(model, guidance),
-        image_guidance_scale: strength === "Suave" ? 2 : strength === "Forte" ? 1.1 : 1.5,
-        negative_prompt: negativePrompt,
-      },
-    };
-  }
 
   if (model.endpoint?.handler === "dreamshaper") {
     return {
@@ -160,7 +149,7 @@ function endpointPayload(
       image: imageBase64,
       num_inference_steps: steps,
       guidance_scale: guidanceFor(model, guidance),
-      strength: strength === "Suave" ? 0.35 : strength === "Forte" ? 0.8 : 0.6,
+      strength: strength === "Suave" ? 0.3 : strength === "Forte" ? 0.65 : 0.45,
       negative_prompt: negativePrompt,
     };
   }
@@ -345,6 +334,7 @@ export async function startHfModel(input: {
   const token = hfToken();
   if (!token) return { ok: false, error: "A Hugging Face não está configurada neste servidor." };
   const prompt = input.prompt.trim().slice(0, 2000);
+  const values = resolveHfValues(input.modelId, prompt, input.values);
   if (!prompt) return { ok: false, error: "Escreve um prompt." };
   if (model.endpoint && unsafeAdultPrompt(prompt)) {
     return {
@@ -366,7 +356,7 @@ export async function startHfModel(input: {
     };
   }
   if (model.endpoint) {
-    const result = await runEndpointModel(model, token, prompt, input.values, input.imageUrl);
+    const result = await runEndpointModel(model, token, prompt, values, input.imageUrl);
     return result.ok ? { ok: true, url: result.url, kind: "image" } : result;
   }
   const url = `${ROUTER}/${model.providerId}?_subdomain=queue`;
@@ -375,7 +365,7 @@ export async function startHfModel(input: {
     response = await fetch(url, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(payloadFor(model, prompt, input.values, input.imageUrl)),
+      body: JSON.stringify(payloadFor(model, prompt, values, input.imageUrl)),
     });
   } catch {
     return { ok: false, error: "Não consegui contactar a Hugging Face." };

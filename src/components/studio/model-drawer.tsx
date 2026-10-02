@@ -14,6 +14,18 @@ const FILTERS = [
   { id: "lora", label: "LoRA" },
 ] as const;
 
+const HF_PRIORITY = new Map(
+  [
+    "hf:Lykon/dreamshaper-xl-v2-turbo",
+    "hf:Qwen/Qwen-Image-Edit",
+    "hf:black-forest-labs/FLUX.1-Kontext-dev",
+    "hf:black-forest-labs/FLUX.2-klein-9B",
+    "hf:black-forest-labs/FLUX.2-klein-4B",
+    "hf:fancyfeast/big-asp-v2",
+    "hf:TheImposterImposters/LUSTIFY-v2.0",
+  ].map((id, index) => [id, index]),
+);
+
 function capabilityLabel(model: CatalogModel): string {
   if (model.provider === "huggingface") {
     const task = HF_MODELS.find((item) => item.id === model.id)?.task;
@@ -63,7 +75,10 @@ export function ModelDrawer({ open, onClose }: { open: boolean; onClose: () => v
 
   if (!open) return null;
 
-  const catalog = source === "huggingface" ? HF_MODELS : models;
+  const catalog =
+    source === "huggingface"
+      ? [...HF_MODELS].sort((a, b) => (HF_PRIORITY.get(a.id) ?? 99) - (HF_PRIORITY.get(b.id) ?? 99))
+      : models;
   const shown = catalog.filter((model) => {
     if (source === "huggingface") {
       const blob = `${model.displayName} ${model.description}`.toLowerCase();
@@ -158,7 +173,8 @@ export function ModelDrawer({ open, onClose }: { open: boolean; onClose: () => v
           {source === "huggingface" && (
             <p className="rounded-xl border border-border bg-surface px-3 py-2 text-xs leading-relaxed text-muted">
               Modelos 18+ aceitam apenas adultos e conteúdo consensual. Modelos de texto não usam a
-              foto anexada.
+              foto anexada. Para melhor anatomia e detalhe, começa no DreamShaper XL, Qwen Edit ou
+              Kontext.
             </p>
           )}
           {loading && source === "replicate" && (

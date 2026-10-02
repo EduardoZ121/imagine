@@ -9,42 +9,19 @@ export type HfModel = CatalogModel & {
   endpoint?: {
     env: string;
     fallbackUrl: string;
-    handler?: "dreamshaper" | "instruct-pix2pix";
+    handler?: "dreamshaper";
   };
 };
 
 export const HF_MODELS: HfModel[] = [
   {
-    id: "hf:Eddy12253/imagine-instruct-pix2pix",
-    provider: "huggingface",
-    owner: "Eddy12253",
-    name: "imagine-instruct-pix2pix",
-    displayName: "InstructPix2Pix",
-    description:
-      "Edita a foto seguindo uma instrução directa. Endpoint dedicado sem filtro do fornecedor.",
-    type: "image",
-    tags: ["image", "edit", "18+"],
-    official: false,
-    supportsLora: false,
-    followsPrompt: true,
-    pricingLabel: "Endpoint dedicado Hugging Face",
-    task: "image-to-image",
-    providerId: "timbrooks/instruct-pix2pix",
-    needsImage: true,
-    endpoint: {
-      env: "HF_INSTRUCT_I2I_ENDPOINT_URL",
-      fallbackUrl: "https://6ab9392b9ec415b652acd801.endpoints.huggingface.cloud",
-      handler: "instruct-pix2pix",
-    },
-  },
-  {
-    id: "hf:Lykon/dreamshaper-8",
+    id: "hf:Lykon/dreamshaper-xl-v2-turbo",
     provider: "huggingface",
     owner: "Lykon",
-    name: "dreamshaper-8",
-    displayName: "DreamShaper 8 Img2Img",
+    name: "dreamshaper-xl-v2-turbo",
+    displayName: "DreamShaper XL Img2Img",
     description:
-      "Reimagina a foto sem filtro do fornecedor. Descreve o resultado final; Suave preserva mais.",
+      "SDXL até 1024 px, sem filtro do fornecedor. Melhor detalhe e anatomia; descreve o resultado final.",
     type: "image",
     tags: ["image", "edit", "18+"],
     official: false,
@@ -52,7 +29,7 @@ export const HF_MODELS: HfModel[] = [
     followsPrompt: true,
     pricingLabel: "Endpoint dedicado Hugging Face",
     task: "image-to-image",
-    providerId: "Lykon/dreamshaper-8",
+    providerId: "Lykon/dreamshaper-xl-v2-turbo",
     needsImage: true,
     endpoint: {
       env: "HF_DREAMSHAPER_I2I_ENDPOINT_URL",
@@ -224,6 +201,7 @@ function aspectField(video: boolean, original: boolean): ModelField {
 }
 
 export function maxSteps(model: HfModel): number {
+  if (model.endpoint?.handler === "dreamshaper") return 12;
   if (model.providerId.includes("schnell")) return 4;
   if (model.providerId.includes("z-image") || model.providerId.includes("klein")) return 8;
   if (model.providerId.includes("kontext")) return 35;
@@ -231,7 +209,12 @@ export function maxSteps(model: HfModel): number {
 }
 
 function stepField(model: HfModel): ModelField {
-  const available = model.endpoint?.handler ? [16, 28, 35, 40] : [4, 8, 16, 28, 35, 40];
+  const available =
+    model.endpoint?.handler === "dreamshaper"
+      ? [4, 6, 8, 10, 12]
+      : model.endpoint?.handler
+        ? [16, 28, 35, 40]
+        : [4, 8, 16, 28, 35, 40];
   const choices = available.filter((n) => n <= maxSteps(model)).map(String);
   return {
     key: "steps",
@@ -314,7 +297,8 @@ export function hfFields(model: HfModel): ModelField[] {
       kind: "string",
       required: false,
       description: "Elementos, defeitos ou estilos que não devem aparecer.",
-      defaultValue: "low quality, blurry, deformed, extra fingers, watermark, text",
+      defaultValue:
+        "low quality, blurry, cropped, out of frame, distorted anatomy, deformed body, duplicate limbs, extra limbs, missing limbs, twisted torso, malformed hands, extra fingers, fused fingers, watermark, text",
       prominent: false,
       lora: false,
     });
@@ -346,6 +330,46 @@ export function isHfModel(id: string | undefined): boolean {
 export function isDedicatedHfImageEditor(id: string | undefined): boolean {
   const model = id ? hfModel(id) : undefined;
   return Boolean(model?.endpoint?.handler && model.task === "image-to-image");
+}
+
+export function dedicatedHfEditorMaxPixels(id: string | undefined): number {
+  return hfModel(id)?.endpoint?.handler === "dreamshaper" ? 1024 : 768;
+}
+
+function normalizedPrompt(prompt: string): string {
+  return prompt
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+}
+
+export function resolveHfValues(
+  id: string,
+  prompt: string,
+  values: Record<string, string | number | boolean>,
+): Record<string, string | number | boolean> {
+  if (hfModel(id)?.task !== "image-to-image") return values;
+  const text = normalizedPrompt(prompt);
+  const resolved = { ...values };
+
+  const changesClothes =
+    /\b(nude|naked|undress(?:ed)?|topless|lingerie|bikini|swimsuit|nu|nua|nudez|despir|sem roupa)\b/.test(
+      text,
+    ) ||
+    /\b(change|replace|remove|wear|dress|trocar|mudar|remover|vestir)\b.{0,32}\b(clothes?|clothing|outfit|dress|shirt|jacket|suit|roupa|vestido|camisa|casaco|fato)\b/.test(
+      text,
+    );
+  const changesBody =
+    /\b(muscular|slimmer|fatter|thin body|different body|new pose|different pose|mais musculoso|mais magro|mais gordo|mudar corpo|trocar corpo|nova pose)\b/.test(
+      text,
+    );
+  const changesFace =
+    /\b(change|replace|swap|mudar|trocar)\b.{0,24}\b(face|rosto|identity|identidade)\b/.test(text);
+
+  if (changesClothes) resolved.keep_clothes = false;
+  if (changesBody) resolved.keep_body = false;
+  if (changesFace) resolved.keep_face = false;
+  return resolved;
 }
 
 export function hfSize(aspect: string): { width: number; height: number } {
