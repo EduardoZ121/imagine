@@ -72,7 +72,7 @@ function editPrompt(prompt: string, values: Record<string, string | number | boo
   const locks = [
     on(values, "keep_face") ? "Preserve the exact face and identity" : "",
     on(values, "keep_body")
-      ? "Preserve the exact framing, camera angle, body proportions, anatomy, limb count and pose"
+      ? "Preserve the exact framing, camera angle, body proportions, limb count and pose; render anatomically correct shoulders, torso, arms, hands, hips and legs"
       : "",
     on(values, "keep_clothes") ? "Preserve the same clothes" : "",
   ].filter(Boolean);
