@@ -343,20 +343,22 @@ function normalizedPrompt(prompt: string): string {
     .toLowerCase();
 }
 
-export function resolveHfValues(
-  id: string,
-  prompt: string,
-  values: Record<string, string | number | boolean>,
-): Record<string, string | number | boolean> {
-  if (hfModel(id)?.task !== "image-to-image") return values;
+export function hfEditIntent(prompt: string): {
+  changesClothes: boolean;
+  removesClothes: boolean;
+  changesBody: boolean;
+  changesFace: boolean;
+} {
   const text = normalizedPrompt(prompt);
-  const resolved = { ...values };
-
-  const changesClothes =
-    /\b(nude|naked|undress(?:ed)?|topless|lingerie|bikini|swimsuit|nu|nua|nudez|despir|sem roupa)\b/.test(
+  const removesClothes =
+    /\b(nude|naked|undress(?:ed)?|topless|nu|nua|nudez|despir|sem roupa)\b/.test(text) ||
+    /\b(remove|take off|tirar|remover)\b.{0,24}\b(clothes?|clothing|outfit|dress|shirt|roupa|vestido|camisa)\b/.test(
       text,
-    ) ||
-    /\b(change|replace|remove|wear|dress|trocar|mudar|remover|vestir)\b.{0,32}\b(clothes?|clothing|outfit|dress|shirt|jacket|suit|roupa|vestido|camisa|casaco|fato)\b/.test(
+    );
+  const changesClothes =
+    removesClothes ||
+    /\b(lingerie|bikini|swimsuit)\b/.test(text) ||
+    /\b(change|replace|wear|dress|trocar|mudar|vestir)\b.{0,32}\b(clothes?|clothing|outfit|dress|shirt|jacket|suit|roupa|vestido|camisa|casaco|fato)\b/.test(
       text,
     );
   const changesBody =
@@ -364,11 +366,28 @@ export function resolveHfValues(
       text,
     );
   const changesFace =
-    /\b(change|replace|swap|mudar|trocar)\b.{0,24}\b(face|rosto|identity|identidade)\b/.test(text);
+    /\b(change|replace|swap|mudar|trocar)\b.{0,24}\b(face|rosto|identity|identidade)\b/.test(
+      text,
+    );
+  return { changesClothes, removesClothes, changesBody, changesFace };
+}
+
+export function resolveHfValues(
+  id: string,
+  prompt: string,
+  values: Record<string, string | number | boolean>,
+): Record<string, string | number | boolean> {
+  const model = hfModel(id);
+  if (model?.task !== "image-to-image") return values;
+  const resolved = { ...values };
+  const { changesClothes, removesClothes, changesBody, changesFace } = hfEditIntent(prompt);
 
   if (changesClothes) resolved.keep_clothes = false;
   if (changesBody) resolved.keep_body = false;
   if (changesFace) resolved.keep_face = false;
+  if (model.endpoint?.handler === "dreamshaper" && (removesClothes || changesBody)) {
+    resolved.strength = "Forte";
+  }
   return resolved;
 }
 

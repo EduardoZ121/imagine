@@ -1,5 +1,13 @@
 import { readFileSync } from "node:fs";
-import { hfModel, hfSize, isHfModel, maxSteps, resolveHfValues, type HfModel } from "./hf";
+import {
+  hfEditIntent,
+  hfModel,
+  hfSize,
+  isHfModel,
+  maxSteps,
+  resolveHfValues,
+  type HfModel,
+} from "./hf";
 
 const ROUTER = "https://router.huggingface.co/fal-ai";
 
@@ -80,6 +88,30 @@ function editPrompt(prompt: string, values: Record<string, string | number | boo
   return `${prompt}. ${locks.join(". ")}. Keep the subject fully inside the original frame.`;
 }
 
+function dreamshaperPrompt(
+  prompt: string,
+  values: Record<string, string | number | boolean>,
+): string {
+  const { removesClothes } = hfEditIntent(prompt);
+  const requestedResult = removesClothes
+    ? "the same clearly adult person, completely nude and unclothed, with natural realistic skin"
+    : `the same person with this final appearance: ${prompt}`;
+  const locks = [
+    on(values, "keep_face") ? "same face, facial features and identity" : "",
+    on(values, "keep_body")
+      ? "same body proportions, pose, camera angle and full-body framing"
+      : "",
+    on(values, "keep_clothes") ? "wearing exactly the same clothes" : "",
+  ].filter(Boolean);
+  return [
+    `RAW photorealistic photo of ${requestedResult}`,
+    ...locks,
+    "anatomically correct shoulders, torso, arms, hands, hips and legs",
+    "the entire subject fully inside the original frame",
+    "realistic skin texture and coherent lighting",
+  ].join(", ");
+}
+
 function guidanceFor(model: HfModel, fidelity: string): number {
   if (model.endpoint?.handler === "dreamshaper") {
     return fidelity === "Baixa" ? 1.5 : fidelity === "Alta" ? 3 : 2;
@@ -145,11 +177,11 @@ function endpointPayload(
 
   if (model.endpoint?.handler === "dreamshaper") {
     return {
-      inputs: prompt,
+      inputs: dreamshaperPrompt(prompt, values),
       image: imageBase64,
       num_inference_steps: steps,
       guidance_scale: guidanceFor(model, guidance),
-      strength: strength === "Suave" ? 0.3 : strength === "Forte" ? 0.65 : 0.45,
+      strength: strength === "Suave" ? 0.35 : strength === "Forte" ? 0.72 : 0.52,
       negative_prompt: negativePrompt,
     };
   }
@@ -202,7 +234,6 @@ async function runEndpointModel(
       error: "A foto não pôde ser preparada para este modelo. Anexa a imagem outra vez.",
     };
   }
-  const instruction = model.task === "image-to-image" ? editPrompt(prompt, values) : prompt;
   let response: Response;
   try {
     response = await fetch(url, {
@@ -213,7 +244,7 @@ async function runEndpointModel(
         "Content-Type": "application/json",
         "X-Scale-Up-Timeout": "600",
       },
-      body: JSON.stringify(endpointPayload(model, instruction, values, encodedImage)),
+      body: JSON.stringify(endpointPayload(model, prompt, values, encodedImage)),
       signal: AbortSignal.timeout(12 * 60 * 1000),
     });
   } catch (error) {
