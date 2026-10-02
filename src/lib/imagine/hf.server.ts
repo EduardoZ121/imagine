@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import {
-  hfEditIntent,
   hfModel,
   hfSize,
   isHfModel,
@@ -88,34 +87,7 @@ function editPrompt(prompt: string, values: Record<string, string | number | boo
   return `${prompt}. ${locks.join(". ")}. Keep the subject fully inside the original frame.`;
 }
 
-function dreamshaperPrompt(
-  prompt: string,
-  values: Record<string, string | number | boolean>,
-): string {
-  const { removesClothes } = hfEditIntent(prompt);
-  const requestedResult = removesClothes
-    ? "the same clearly adult person, completely nude and unclothed, with natural realistic skin"
-    : `the same person with this final appearance: ${prompt}`;
-  const locks = [
-    on(values, "keep_face") ? "same face, facial features and identity" : "",
-    on(values, "keep_body")
-      ? "same body proportions, pose, camera angle and full-body framing"
-      : "",
-    on(values, "keep_clothes") ? "wearing exactly the same clothes" : "",
-  ].filter(Boolean);
-  return [
-    `RAW photorealistic photo of ${requestedResult}`,
-    ...locks,
-    "anatomically correct shoulders, torso, arms, hands, hips and legs",
-    "the entire subject fully inside the original frame",
-    "realistic skin texture and coherent lighting",
-  ].join(", ");
-}
-
 function guidanceFor(model: HfModel, fidelity: string): number {
-  if (model.endpoint?.handler === "dreamshaper") {
-    return fidelity === "Baixa" ? 1.5 : fidelity === "Alta" ? 3 : 2;
-  }
   if (model.endpoint) return fidelity === "Baixa" ? 4 : fidelity === "Alta" ? 7 : 5.5;
   if (model.providerId.includes("kontext"))
     return fidelity === "Baixa" ? 2 : fidelity === "Alta" ? 3.5 : 2.5;
@@ -167,7 +139,6 @@ function endpointPayload(
   imageBase64?: string,
 ) {
   const guidance = textOf(values, "guidance", "Média");
-  const strength = textOf(values, "strength", "Média");
   const steps = stepsFor(model, textOf(values, "steps", ""));
   const negativePrompt = textOf(
     values,
@@ -175,14 +146,12 @@ function endpointPayload(
     "low quality, blurry, cropped, out of frame, distorted anatomy, deformed body, duplicate limbs, extra limbs, missing limbs, twisted torso, malformed hands, extra fingers, fused fingers, watermark, text",
   ).slice(0, 1000);
 
-  if (model.endpoint?.handler === "dreamshaper") {
+  if (model.endpoint?.handler === "flux2-klein") {
     return {
-      inputs: dreamshaperPrompt(prompt, values),
+      inputs: editPrompt(prompt, values),
       image: imageBase64,
-      num_inference_steps: steps,
-      guidance_scale: guidanceFor(model, guidance),
-      strength: strength === "Suave" ? 0.35 : strength === "Forte" ? 0.72 : 0.52,
-      negative_prompt: negativePrompt,
+      num_inference_steps: 4,
+      guidance_scale: 1,
     };
   }
 

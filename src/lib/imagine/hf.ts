@@ -9,32 +9,34 @@ export type HfModel = CatalogModel & {
   endpoint?: {
     env: string;
     fallbackUrl: string;
-    handler?: "dreamshaper";
+    handler?: "flux2-klein";
   };
 };
 
+const LEGACY_DREAMSHAPER_ID = "hf:Lykon/dreamshaper-xl-v2-turbo";
+
 export const HF_MODELS: HfModel[] = [
   {
-    id: "hf:Lykon/dreamshaper-xl-v2-turbo",
+    id: "hf:black-forest-labs/FLUX.2-klein-4B-dedicated",
     provider: "huggingface",
-    owner: "Lykon",
-    name: "dreamshaper-xl-v2-turbo",
-    displayName: "DreamShaper XL Img2Img",
+    owner: "black-forest-labs",
+    name: "FLUX.2-klein-4B-dedicated",
+    displayName: "FLUX.2 Klein 4B Dedicado",
     description:
-      "SDXL até 1024 px, sem filtro do fornecedor. Melhor detalhe e anatomia; descreve o resultado final.",
+      "Editor instrucional aberto até 1024 px. Altera a foto seguindo o pedido, sem moderação de fornecedor.",
     type: "image",
     tags: ["image", "edit", "18+"],
-    official: false,
+    official: true,
     supportsLora: false,
     followsPrompt: true,
     pricingLabel: "Endpoint dedicado Hugging Face",
     task: "image-to-image",
-    providerId: "Lykon/dreamshaper-xl-v2-turbo",
+    providerId: "black-forest-labs/FLUX.2-klein-4B",
     needsImage: true,
     endpoint: {
       env: "HF_DREAMSHAPER_I2I_ENDPOINT_URL",
       fallbackUrl: "https://6ab9392b9ec415b652acd800.endpoints.huggingface.cloud",
-      handler: "dreamshaper",
+      handler: "flux2-klein",
     },
   },
   {
@@ -96,23 +98,6 @@ export const HF_MODELS: HfModel[] = [
     pricingLabel: "Créditos Hugging Face",
     task: "image-to-image",
     providerId: "fal-ai/qwen-image-edit-plus",
-    needsImage: true,
-  },
-  {
-    id: "hf:black-forest-labs/FLUX.2-klein-4B",
-    provider: "huggingface",
-    owner: "black-forest-labs",
-    name: "FLUX.2-klein-4B",
-    displayName: "FLUX.2 Klein 4B",
-    description: "Edita a foto. No máximo 8 passos. Menos nítido do que o Kontext.",
-    type: "image",
-    tags: ["image", "edit"],
-    official: true,
-    supportsLora: false,
-    followsPrompt: true,
-    pricingLabel: "Créditos Hugging Face",
-    task: "image-to-image",
-    providerId: "fal-ai/flux-2/klein/4b/distilled/edit",
     needsImage: true,
   },
   {
@@ -201,7 +186,7 @@ function aspectField(video: boolean, original: boolean): ModelField {
 }
 
 export function maxSteps(model: HfModel): number {
-  if (model.endpoint?.handler === "dreamshaper") return 12;
+  if (model.endpoint?.handler === "flux2-klein") return 4;
   if (model.providerId.includes("schnell")) return 4;
   if (model.providerId.includes("z-image") || model.providerId.includes("klein")) return 8;
   if (model.providerId.includes("kontext")) return 35;
@@ -210,8 +195,8 @@ export function maxSteps(model: HfModel): number {
 
 function stepField(model: HfModel): ModelField {
   const available =
-    model.endpoint?.handler === "dreamshaper"
-      ? [4, 6, 8, 10, 12]
+    model.endpoint?.handler === "flux2-klein"
+      ? [4]
       : model.endpoint?.handler
         ? [16, 28, 35, 40]
         : [4, 8, 16, 28, 35, 40];
@@ -222,7 +207,7 @@ function stepField(model: HfModel): ModelField {
     kind: "enum",
     required: false,
     enumValues: choices,
-    defaultValue: model.endpoint?.handler === "dreamshaper" ? "8" : choices[choices.length - 1],
+    defaultValue: choices[choices.length - 1],
     prominent: true,
     lora: false,
   };
@@ -235,19 +220,6 @@ function guidanceField(): ModelField {
     kind: "enum",
     required: false,
     enumValues: ["Baixa", "Média", "Alta"],
-    defaultValue: "Média",
-    prominent: true,
-    lora: false,
-  };
-}
-
-function strengthField(): ModelField {
-  return {
-    key: "strength",
-    label: "Mudança",
-    kind: "enum",
-    required: false,
-    enumValues: ["Suave", "Média", "Forte"],
     defaultValue: "Média",
     prominent: true,
     lora: false,
@@ -288,9 +260,8 @@ export function hfFields(model: HfModel): ModelField[] {
         }
       : stepField(model),
   ];
-  if (guided && !video) fields.push(guidanceField());
-  if (model.endpoint?.handler) fields.push(strengthField());
-  if (model.endpoint) {
+  if (guided && !video && model.endpoint?.handler !== "flux2-klein") fields.push(guidanceField());
+  if (model.endpoint && model.endpoint.handler !== "flux2-klein") {
     fields.push({
       key: "negative_prompt",
       label: "Evitar na imagem",
@@ -320,6 +291,9 @@ export function hfFields(model: HfModel): ModelField[] {
 }
 
 export function hfModel(id: string): HfModel | undefined {
+  if (id === LEGACY_DREAMSHAPER_ID) {
+    return HF_MODELS.find((model) => model.endpoint?.handler === "flux2-klein");
+  }
   return HF_MODELS.find((model) => model.id === id);
 }
 
@@ -333,7 +307,7 @@ export function isDedicatedHfImageEditor(id: string | undefined): boolean {
 }
 
 export function dedicatedHfEditorMaxPixels(id: string | undefined): number {
-  return id && hfModel(id)?.endpoint?.handler === "dreamshaper" ? 1024 : 768;
+  return id && hfModel(id)?.endpoint?.handler === "flux2-klein" ? 1024 : 768;
 }
 
 function normalizedPrompt(prompt: string): string {
@@ -385,9 +359,6 @@ export function resolveHfValues(
   if (changesClothes) resolved.keep_clothes = false;
   if (changesBody) resolved.keep_body = false;
   if (changesFace) resolved.keep_face = false;
-  if (model.endpoint?.handler === "dreamshaper" && (changesClothes || changesBody)) {
-    resolved.strength = "Forte";
-  }
   return resolved;
 }
 

@@ -16,11 +16,10 @@ const FILTERS = [
 
 const HF_PRIORITY = new Map(
   [
-    "hf:Lykon/dreamshaper-xl-v2-turbo",
+    "hf:black-forest-labs/FLUX.2-klein-4B-dedicated",
     "hf:Qwen/Qwen-Image-Edit",
     "hf:black-forest-labs/FLUX.1-Kontext-dev",
     "hf:black-forest-labs/FLUX.2-klein-9B",
-    "hf:black-forest-labs/FLUX.2-klein-4B",
     "hf:fancyfeast/big-asp-v2",
     "hf:TheImposterImposters/LUSTIFY-v2.0",
   ].map((id, index) => [id, index]),
@@ -173,8 +172,8 @@ export function ModelDrawer({ open, onClose }: { open: boolean; onClose: () => v
           {source === "huggingface" && (
             <p className="rounded-xl border border-border bg-surface px-3 py-2 text-xs leading-relaxed text-muted">
               Modelos 18+ aceitam apenas adultos e conteúdo consensual. Modelos de texto não usam a
-              foto anexada. Para melhor anatomia e detalhe, começa no DreamShaper XL, Qwen Edit ou
-              Kontext.
+              foto anexada. Para alterações que precisam de seguir o pedido, começa no FLUX.2 Klein
+              Dedicado, Qwen Edit ou Kontext.
             </p>
           )}
           {loading && source === "replicate" && (
