@@ -222,7 +222,7 @@ function stepField(model: HfModel): ModelField {
     kind: "enum",
     required: false,
     enumValues: choices,
-    defaultValue: choices[choices.length - 1],
+    defaultValue: model.endpoint?.handler === "dreamshaper" ? "8" : choices[choices.length - 1],
     prominent: true,
     lora: false,
   };
