@@ -380,12 +380,12 @@ export function resolveHfValues(
   const model = hfModel(id);
   if (model?.task !== "image-to-image") return values;
   const resolved = { ...values };
-  const { changesClothes, removesClothes, changesBody, changesFace } = hfEditIntent(prompt);
+  const { changesClothes, changesBody, changesFace } = hfEditIntent(prompt);
 
   if (changesClothes) resolved.keep_clothes = false;
   if (changesBody) resolved.keep_body = false;
   if (changesFace) resolved.keep_face = false;
-  if (model.endpoint?.handler === "dreamshaper" && (removesClothes || changesBody)) {
+  if (model.endpoint?.handler === "dreamshaper" && (changesClothes || changesBody)) {
     resolved.strength = "Forte";
   }
   return resolved;
