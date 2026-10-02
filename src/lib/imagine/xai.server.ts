@@ -490,13 +490,17 @@ export async function startVideo(input: StartVideoInput): Promise<StartVideoResu
     return { ok: true, requestId: started.prediction.id! };
   }
 
+  if (input.startFrame && !startFrame) {
+    return { ok: false, error: "Não consegui usar a foto. Anexa-a outra vez." };
+  }
+
   if (startFrame) {
     const started = await createPrediction(VIDEO_I2V_MODEL, {
       prompt,
       image: startFrame,
       duration: Math.min(15, Math.max(1, Math.round(input.duration) || 6)),
       resolution,
-      aspect_ratio: aspect,
+      aspect_ratio: "auto",
     });
     if (!started.ok) return started;
     return { ok: true, requestId: started.prediction.id! };
@@ -524,6 +528,21 @@ export async function startVideo(input: StartVideoInput): Promise<StartVideoResu
   });
   if (!frame.ok) return frame;
   return { ok: true, requestId: `frame:${frame.prediction.id}` };
+}
+
+export async function cancelVideoRequest(requestId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const raw = requestId.trim();
+  if (raw.startsWith("hf:")) return { ok: true };
+  const id = raw.startsWith("frame:") ? raw.slice(6) : raw.startsWith("img:") ? raw.slice(4) : raw;
+  if (!id || !/^[A-Za-z0-9._:-]+$/.test(id)) return { ok: false, error: "Pedido inválido." };
+  if (!replicateToken()) return { ok: false, error: "A geração não está disponível neste momento." };
+  try {
+    const res = await replicateFetch(`/predictions/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+    if (!res.ok && res.status !== 409) return { ok: false, error: await readError(res) };
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Não consegui cancelar." };
+  }
 }
 
 export async function pollVideoRequest(requestId: string): Promise<PollVideoResult> {

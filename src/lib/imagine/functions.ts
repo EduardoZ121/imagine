@@ -41,6 +41,13 @@ export const pollImagineVideo = createServerFn({ method: "POST" })
     return pollVideoRequest(data.requestId);
   });
 
+export const cancelImagineGeneration = createServerFn({ method: "POST" })
+  .validator((data: { requestId: string }) => data)
+  .handler(async ({ data }) => {
+    const { cancelVideoRequest } = await import("./xai.server");
+    return cancelVideoRequest(data.requestId);
+  });
+
 export const searchImagineModels = createServerFn({ method: "POST" })
   .validator((data: { query?: string }) => ({ query: data?.query?.slice(0, 80) }))
   .handler(async ({ data }) => {

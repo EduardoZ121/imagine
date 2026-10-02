@@ -105,57 +105,6 @@ export const HF_MODELS: HfModel[] = [
     },
   },
   {
-    id: "hf:black-forest-labs/FLUX.1-schnell",
-    provider: "huggingface",
-    owner: "black-forest-labs",
-    name: "FLUX.1-schnell",
-    displayName: "FLUX.1 Schnell",
-    description: "Texto para imagem, rascunho rápido. Segue o texto pior do que o Qwen Image.",
-    type: "image",
-    tags: ["image"],
-    official: true,
-    supportsLora: false,
-    followsPrompt: true,
-    pricingLabel: "Créditos Hugging Face",
-    task: "text-to-image",
-    providerId: "fal-ai/flux/schnell",
-    needsImage: false,
-  },
-  {
-    id: "hf:Tongyi-MAI/Z-Image-Turbo",
-    provider: "huggingface",
-    owner: "Tongyi-MAI",
-    name: "Z-Image-Turbo",
-    displayName: "Z-Image Turbo",
-    description: "Texto para imagem, rápido. Menos fiel ao texto do que o Qwen Image.",
-    type: "image",
-    tags: ["image"],
-    official: true,
-    supportsLora: false,
-    followsPrompt: true,
-    pricingLabel: "Créditos Hugging Face",
-    task: "text-to-image",
-    providerId: "fal-ai/z-image/turbo",
-    needsImage: false,
-  },
-  {
-    id: "hf:Qwen/Qwen-Image",
-    provider: "huggingface",
-    owner: "Qwen",
-    name: "Qwen-Image",
-    displayName: "Qwen Image",
-    description: "Texto para imagem. Segue o texto melhor do que o Schnell.",
-    type: "image",
-    tags: ["image"],
-    official: true,
-    supportsLora: false,
-    followsPrompt: true,
-    pricingLabel: "Créditos Hugging Face",
-    task: "text-to-image",
-    providerId: "fal-ai/qwen-image",
-    needsImage: false,
-  },
-  {
     id: "hf:Qwen/Qwen-Image-Edit",
     provider: "huggingface",
     owner: "Qwen",
@@ -178,7 +127,7 @@ export const HF_MODELS: HfModel[] = [
     owner: "black-forest-labs",
     name: "FLUX.2-klein-4B",
     displayName: "FLUX.2 Klein 4B",
-    description: "Edita a foto anexada. Licença Apache 2.0.",
+    description: "Edita a foto. No máximo 8 passos. Menos nítido do que o Kontext.",
     type: "image",
     tags: ["image", "edit"],
     official: true,
@@ -188,23 +137,6 @@ export const HF_MODELS: HfModel[] = [
     task: "image-to-image",
     providerId: "fal-ai/flux-2/klein/4b/distilled/edit",
     needsImage: true,
-  },
-  {
-    id: "hf:Wan-AI/Wan2.2-TI2V-5B",
-    provider: "huggingface",
-    owner: "Wan-AI",
-    name: "Wan2.2-TI2V-5B",
-    displayName: "Wan 2.2 5B",
-    description: "Texto para vídeo, cerca de 5 segundos. A foto não entra neste modelo.",
-    type: "video",
-    tags: ["video"],
-    official: true,
-    supportsLora: false,
-    followsPrompt: true,
-    pricingLabel: "Créditos Hugging Face",
-    task: "text-to-video",
-    providerId: "fal-ai/wan/v2.2-5b/text-to-video",
-    needsImage: false,
   },
   {
     id: "hf:black-forest-labs/FLUX.1-Kontext-dev",
@@ -229,7 +161,7 @@ export const HF_MODELS: HfModel[] = [
     owner: "black-forest-labs",
     name: "FLUX.2-klein-9B",
     displayName: "FLUX.2 Klein 9B",
-    description: "Edita a foto. Precisa da imagem anexada.",
+    description: "Edita a foto. No máximo 8 passos.",
     type: "image",
     tags: ["image", "edit"],
     official: true,
@@ -291,14 +223,23 @@ function aspectField(video: boolean, original: boolean): ModelField {
   };
 }
 
-function qualityField(): ModelField {
+export function maxSteps(model: HfModel): number {
+  if (model.providerId.includes("schnell")) return 4;
+  if (model.providerId.includes("z-image") || model.providerId.includes("klein")) return 8;
+  if (model.providerId.includes("kontext")) return 35;
+  return 40;
+}
+
+function stepField(model: HfModel): ModelField {
+  const available = model.endpoint?.handler ? [16, 28, 35, 40] : [4, 8, 16, 28, 35, 40];
+  const choices = available.filter((n) => n <= maxSteps(model)).map(String);
   return {
-    key: "quality",
-    label: "Qualidade",
+    key: "steps",
+    label: "Passos",
     kind: "enum",
     required: false,
-    enumValues: ["Rápida", "Equilibrada", "Alta"],
-    defaultValue: "Alta",
+    enumValues: choices,
+    defaultValue: choices[choices.length - 1],
     prominent: true,
     lora: false,
   };
@@ -330,17 +271,41 @@ function strengthField(): ModelField {
   };
 }
 
+function keepField(key: string, label: string): ModelField {
+  return {
+    key,
+    label,
+    kind: "boolean",
+    required: false,
+    defaultValue: true,
+    prominent: true,
+    lora: false,
+  };
+}
+
 export function hfFields(model: HfModel): ModelField[] {
   const usesPhoto = model.task === "image-to-image" || model.task === "image-to-video";
+  const video = model.task === "text-to-video" || model.task === "image-to-video";
   const guided =
     Boolean(model.endpoint) ||
     model.providerId.includes("qwen-image") ||
     model.providerId.includes("kontext");
   const fields: ModelField[] = [
-    aspectField(model.task !== "text-to-image" && !usesPhoto, usesPhoto),
-    qualityField(),
+    aspectField(video && !usesPhoto, usesPhoto),
+    video
+      ? {
+          key: "quality",
+          label: "Qualidade",
+          kind: "enum",
+          required: false,
+          enumValues: ["480p", "720p"],
+          defaultValue: "720p",
+          prominent: true,
+          lora: false,
+        }
+      : stepField(model),
   ];
-  if (guided) fields.push(guidanceField());
+  if (guided && !video) fields.push(guidanceField());
   if (model.endpoint?.handler) fields.push(strengthField());
   if (model.endpoint) {
     fields.push({
@@ -355,15 +320,9 @@ export function hfFields(model: HfModel): ModelField[] {
     });
   }
   if (usesPhoto) {
-    fields.push({
-      key: "keep_subject",
-      label: "Manter rosto",
-      kind: "boolean",
-      required: false,
-      defaultValue: true,
-      prominent: true,
-      lora: false,
-    });
+    fields.push(keepField("keep_face", "Manter rosto"));
+    fields.push(keepField("keep_body", "Manter corpo"));
+    fields.push(keepField("keep_clothes", "Manter roupa"));
     fields.push({
       key: "image",
       label: "Foto",

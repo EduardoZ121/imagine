@@ -101,7 +101,7 @@ function AspectGlyph({ ratio }: { ratio: string }) {
 }
 
 function roleLabel(role: RefRole) {
-  if (role === "start") return "Início";
+  if (role === "start") return "1º frame";
   if (role === "last") return "Fim";
   return "Ref";
 }

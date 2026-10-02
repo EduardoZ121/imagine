@@ -353,12 +353,15 @@ function fieldValueLabel(field: ModelField, value: string | number | boolean | u
   if (field.kind === "boolean") {
     const on = value === true;
     if (field.key === "generate_audio") return on ? "Áudio" : "Sem áudio";
-    if (field.key === "keep_subject") return on ? "Manter rosto" : "Rosto livre";
+    if (field.key === "keep_face") return on ? "Manter rosto" : "Rosto livre";
+    if (field.key === "keep_body") return on ? "Manter corpo" : "Corpo livre";
+    if (field.key === "keep_clothes") return on ? "Manter roupa" : "Roupa livre";
     return field.label;
   }
   const names: Record<string, string> = {
     aspect_ratio: "Formato",
     quality: "Qualidade",
+    steps: "Passos",
     guidance: "Texto",
     strength: "Mudança",
     resolution: "Resolução",

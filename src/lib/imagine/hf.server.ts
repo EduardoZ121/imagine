@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { hfModel, hfSize, isHfModel, type HfModel } from "./hf";
+import { hfModel, hfSize, isHfModel, maxSteps, type HfModel } from "./hf";
 
 const ROUTER = "https://router.huggingface.co/fal-ai";
 
@@ -54,15 +54,28 @@ function textOf(
   return typeof value === "string" && value ? value : fallback;
 }
 
-function stepsFor(model: HfModel, quality: string): number {
-  if (model.providerId.includes("schnell")) return quality === "Rápida" ? 2 : 4;
-  if (model.providerId.includes("z-image"))
-    return quality === "Rápida" ? 4 : quality === "Equilibrada" ? 6 : 8;
-  if (model.providerId.includes("klein"))
-    return quality === "Rápida" ? 4 : quality === "Equilibrada" ? 6 : 8;
-  if (model.task === "image-to-image")
-    return quality === "Rápida" ? 20 : quality === "Equilibrada" ? 28 : 40;
-  return quality === "Rápida" ? 12 : quality === "Equilibrada" ? 28 : 40;
+function stepsFor(model: HfModel, raw: string): number {
+  const asked = Number(raw);
+  const max = maxSteps(model);
+  const n = Number.isFinite(asked) ? asked : max;
+  return Math.min(max, Math.max(4, Math.round(n)));
+}
+
+function on(values: Record<string, string | number | boolean>, key: string): boolean {
+  if (values[key] === false) return false;
+  if (key !== "keep_face" && values.keep_subject === false && values[key] === undefined)
+    return false;
+  return true;
+}
+
+function editPrompt(prompt: string, values: Record<string, string | number | boolean>): string {
+  const locks = [
+    on(values, "keep_face") ? "the same face" : "",
+    on(values, "keep_body") ? "the same body and pose" : "",
+    on(values, "keep_clothes") ? "the same clothes" : "",
+  ].filter(Boolean);
+  if (!locks.length) return prompt;
+  return `${prompt}. Keep ${locks.join(", ")}.`;
 }
 
 function guidanceFor(model: HfModel, fidelity: string): number {
@@ -73,19 +86,14 @@ function guidanceFor(model: HfModel, fidelity: string): number {
   if (model.providerId.includes("kontext"))
     return fidelity === "Baixa" ? 2 : fidelity === "Alta" ? 3.5 : 2.5;
   if (model.task === "image-to-image")
-    return fidelity === "Baixa" ? 3.5 : fidelity === "Alta" ? 6.5 : 4.5;
-  return fidelity === "Baixa" ? 2 : fidelity === "Alta" ? 5 : 3.5;
+    return fidelity === "Baixa" ? 3.5 : fidelity === "Alta" ? 5 : 4.5;
+  return fidelity === "Baixa" ? 2 : fidelity === "Alta" ? 4 : 3;
 }
 
-function accelerationFor(quality: string): "none" | "regular" | "high" {
-  if (quality === "Rápida") return "high";
-  if (quality === "Alta") return "none";
+function accelerationFor(steps: number): "none" | "regular" | "high" {
+  if (steps <= 8) return "regular";
+  if (steps >= 28) return "none";
   return "regular";
-}
-
-function editPrompt(prompt: string, keep: boolean): string {
-  if (!keep) return prompt;
-  return `Keep the same person, the same face, the same body and the same identity. Do not replace them. Change only this: ${prompt}`;
 }
 
 function unsafeAdultPrompt(prompt: string): boolean {
@@ -124,9 +132,9 @@ function endpointPayload(
   values: Record<string, string | number | boolean>,
   imageBase64?: string,
 ) {
-  const quality = textOf(values, "quality", "Alta");
   const guidance = textOf(values, "guidance", "Média");
   const strength = textOf(values, "strength", "Média");
+  const steps = stepsFor(model, textOf(values, "steps", ""));
   const negativePrompt = textOf(
     values,
     "negative_prompt",
@@ -138,7 +146,7 @@ function endpointPayload(
       inputs: prompt,
       image: imageBase64,
       parameters: {
-        num_inference_steps: quality === "Rápida" ? 15 : quality === "Equilibrada" ? 20 : 30,
+        num_inference_steps: steps,
         guidance_scale: guidanceFor(model, guidance),
         image_guidance_scale: strength === "Suave" ? 2 : strength === "Forte" ? 1.1 : 1.5,
         negative_prompt: negativePrompt,
@@ -150,7 +158,7 @@ function endpointPayload(
     return {
       inputs: prompt,
       image: imageBase64,
-      num_inference_steps: quality === "Rápida" ? 15 : quality === "Equilibrada" ? 25 : 35,
+      num_inference_steps: steps,
       guidance_scale: guidanceFor(model, guidance),
       strength: strength === "Suave" ? 0.35 : strength === "Forte" ? 0.8 : 0.6,
       negative_prompt: negativePrompt,
@@ -173,7 +181,7 @@ function endpointPayload(
     parameters: {
       width,
       height,
-      num_inference_steps: quality === "Rápida" ? 20 : quality === "Equilibrada" ? 30 : 40,
+      num_inference_steps: steps,
       guidance_scale: guidanceFor(model, guidance),
       negative_prompt: negativePrompt,
     },
@@ -205,8 +213,7 @@ async function runEndpointModel(
       error: "A foto não pôde ser preparada para este modelo. Anexa a imagem outra vez.",
     };
   }
-  const keep = values.keep_subject !== false;
-  const instruction = model.task === "image-to-image" ? editPrompt(prompt, keep) : prompt;
+  const instruction = model.task === "image-to-image" ? editPrompt(prompt, values) : prompt;
   let response: Response;
   try {
     response = await fetch(url, {
@@ -245,69 +252,68 @@ function payloadFor(
   imageUrl?: string,
 ) {
   const aspect = aspectOf(values);
-  const quality = textOf(values, "quality", "Alta");
+  const quality = textOf(values, "quality", "720p");
   const guidance = textOf(values, "guidance", "Média");
-  const keep = values.keep_subject !== false;
+  const steps = stepsFor(model, textOf(values, "steps", ""));
   const size = aspect === "original" ? undefined : hfSize(aspect);
+  const hd = quality !== "480p";
   if (model.task === "text-to-video") {
     return {
       prompt,
       aspect_ratio: aspect === "1:1" || aspect === "9:16" || aspect === "16:9" ? aspect : "16:9",
-      resolution: quality === "Rápida" ? "480p" : "720p",
+      resolution: hd ? "720p" : "480p",
       num_frames: 81,
     };
   }
   if (model.task === "image-to-video") {
-    const instruction = editPrompt(prompt, keep);
+    const instruction = editPrompt(prompt, values);
     if (model.providerId.includes("ltx")) {
       return {
         prompt: instruction,
         image_url: imageUrl,
-        num_frames: quality === "Rápida" ? 73 : 121,
+        num_frames: hd ? 121 : 73,
         video_size: "auto",
         image_strength: 1,
         enable_prompt_expansion: false,
         generate_audio: false,
-        video_quality: quality === "Rápida" ? "medium" : "high",
-        acceleration: quality === "Alta" ? "none" : "regular",
+        video_quality: hd ? "high" : "medium",
+        acceleration: hd ? "none" : "regular",
       };
     }
     const ratio = aspect === "16:9" || aspect === "9:16" || aspect === "1:1" ? aspect : "auto";
     return {
       prompt: instruction,
       image_url: imageUrl,
-      resolution: quality === "Rápida" ? "480p" : "720p",
+      resolution: hd ? "720p" : "480p",
       aspect_ratio: ratio,
       num_frames: 81,
     };
   }
   if (model.task === "image-to-image") {
-    const instruction = editPrompt(prompt, keep);
+    const instruction = editPrompt(prompt, values);
     if (model.providerId.includes("kontext")) {
       return {
         prompt: instruction,
         image_url: imageUrl,
-        num_inference_steps: quality === "Rápida" ? 20 : quality === "Equilibrada" ? 28 : 35,
+        num_inference_steps: steps,
         guidance_scale: guidanceFor(model, guidance),
         resolution_mode:
           aspect === "16:9" || aspect === "9:16" || aspect === "1:1" ? aspect : "match_input",
-        output_format: "jpeg",
+        output_format: "png",
       };
     }
     const body: Record<string, unknown> = {
       prompt: instruction,
       image_urls: imageUrl ? [imageUrl] : undefined,
-      num_inference_steps: stepsFor(model, quality),
-      output_format: "jpeg",
+      num_inference_steps: steps,
+      output_format: "png",
     };
     if (!model.providerId.includes("klein")) body.image_url = imageUrl;
     if (size) body.image_size = size;
     if (model.providerId.includes("qwen-image")) {
       body.guidance_scale = guidanceFor(model, guidance);
-      body.acceleration = accelerationFor(quality);
-      if (keep)
-        body.negative_prompt =
-          "different person, new face, changed body, extra limbs, deformed, blurry";
+      body.acceleration = accelerationFor(steps);
+      if (on(values, "keep_face")) body.negative_prompt = "deformed face, extra limbs, blurry";
     }
     return body;
   }
@@ -315,12 +321,12 @@ function payloadFor(
     prompt,
     image_size: size ?? hfSize("1:1"),
     num_images: 1,
-    num_inference_steps: stepsFor(model, quality),
-    output_format: "jpeg",
+    num_inference_steps: steps,
+    output_format: "png",
   };
   if (model.providerId.includes("qwen-image")) {
     body.guidance_scale = guidanceFor(model, guidance);
-    body.acceleration = accelerationFor(quality);
+    body.acceleration = accelerationFor(steps);
   }
   return body;
 }
