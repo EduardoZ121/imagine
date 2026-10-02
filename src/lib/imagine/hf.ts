@@ -34,8 +34,8 @@ export const HF_MODELS: HfModel[] = [
     providerId: "black-forest-labs/FLUX.2-klein-4B",
     needsImage: true,
     endpoint: {
-      env: "HF_DREAMSHAPER_I2I_ENDPOINT_URL",
-      fallbackUrl: "https://6ab9392b9ec415b652acd800.endpoints.huggingface.cloud",
+      env: "HF_FLUX2_KLEIN_I2I_ENDPOINT_URL",
+      fallbackUrl: "https://6abf5ebb65c8b62f2969e7fa.endpoints.huggingface.cloud",
       handler: "flux2-klein",
     },
   },
