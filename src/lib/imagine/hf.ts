@@ -83,7 +83,7 @@ export const HF_MODELS: HfModel[] = [
     owner: "black-forest-labs",
     name: "FLUX.2-klein-4B",
     displayName: "FLUX.2 Klein 4B",
-    description: "Edita a foto anexada. Licença Apache 2.0.",
+    description: "Edita a foto. No máximo 8 passos. Menos nítido do que o Kontext.",
     type: "image",
     tags: ["image", "edit"],
     official: true,
@@ -134,7 +134,7 @@ export const HF_MODELS: HfModel[] = [
     owner: "black-forest-labs",
     name: "FLUX.2-klein-9B",
     displayName: "FLUX.2 Klein 9B",
-    description: "Edita a foto. Precisa da imagem anexada.",
+    description: "Edita a foto. No máximo 8 passos.",
     type: "image",
     tags: ["image", "edit"],
     official: true,
@@ -196,14 +196,22 @@ function aspectField(video: boolean, original: boolean): ModelField {
   };
 }
 
-function qualityField(): ModelField {
+export function maxSteps(model: HfModel): number {
+  if (model.providerId.includes("schnell")) return 4;
+  if (model.providerId.includes("z-image") || model.providerId.includes("klein")) return 8;
+  if (model.providerId.includes("kontext")) return 35;
+  return 40;
+}
+
+function stepField(model: HfModel): ModelField {
+  const choices = [4, 8, 16, 28, 35, 40].filter((n) => n <= maxSteps(model)).map(String);
   return {
-    key: "quality",
-    label: "Qualidade",
+    key: "steps",
+    label: "Passos",
     kind: "enum",
     required: false,
-    enumValues: ["Rápida", "Equilibrada", "Alta"],
-    defaultValue: "Alta",
+    enumValues: choices,
+    defaultValue: choices[choices.length - 1],
     prominent: true,
     lora: false,
   };
@@ -222,21 +230,42 @@ function guidanceField(): ModelField {
   };
 }
 
+function keepField(key: string, label: string): ModelField {
+  return {
+    key,
+    label,
+    kind: "boolean",
+    required: false,
+    defaultValue: true,
+    prominent: true,
+    lora: false,
+  };
+}
+
 export function hfFields(model: HfModel): ModelField[] {
   const usesPhoto = model.task === "image-to-image" || model.task === "image-to-video";
+  const video = model.task === "text-to-video" || model.task === "image-to-video";
   const guided = model.providerId.includes("qwen-image") || model.providerId.includes("kontext");
-  const fields: ModelField[] = [aspectField(model.task !== "text-to-image" && !usesPhoto, usesPhoto), qualityField()];
-  if (guided) fields.push(guidanceField());
+  const fields: ModelField[] = [
+    aspectField(video && !usesPhoto, usesPhoto),
+    video
+      ? {
+          key: "quality",
+          label: "Qualidade",
+          kind: "enum",
+          required: false,
+          enumValues: ["480p", "720p"],
+          defaultValue: "720p",
+          prominent: true,
+          lora: false,
+        }
+      : stepField(model),
+  ];
+  if (guided && !video) fields.push(guidanceField());
   if (usesPhoto) {
-    fields.push({
-      key: "keep_subject",
-      label: "Manter rosto",
-      kind: "boolean",
-      required: false,
-      defaultValue: true,
-      prominent: true,
-      lora: false,
-    });
+    fields.push(keepField("keep_face", "Manter rosto"));
+    fields.push(keepField("keep_body", "Manter corpo"));
+    fields.push(keepField("keep_clothes", "Manter roupa"));
     fields.push({
       key: "image",
       label: "Foto",

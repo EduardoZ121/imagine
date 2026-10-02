@@ -1,4 +1,4 @@
-const MAX_PIXELS = 1920;
+const MAX_PIXELS = 2048;
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -28,7 +28,7 @@ export async function compressImageFile(file: File): Promise<string> {
     }
     ctx.drawImage(bitmap, 0, 0, width, height);
     bitmap.close();
-    return canvas.toDataURL("image/jpeg", 0.86);
+    return canvas.toDataURL("image/jpeg", 0.92);
   } catch {
     return readFileAsDataUrl(file);
   }
