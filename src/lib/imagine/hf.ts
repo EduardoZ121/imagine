@@ -333,7 +333,7 @@ export function isDedicatedHfImageEditor(id: string | undefined): boolean {
 }
 
 export function dedicatedHfEditorMaxPixels(id: string | undefined): number {
-  return hfModel(id)?.endpoint?.handler === "dreamshaper" ? 1024 : 768;
+  return id && hfModel(id)?.endpoint?.handler === "dreamshaper" ? 1024 : 768;
 }
 
 function normalizedPrompt(prompt: string): string {
