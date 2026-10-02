@@ -51,6 +51,7 @@ function Stage({ item }: { item: GalleryItem }) {
   const pending = item.status === "pending";
   const failed = item.status === "failed";
   const ready = !pending && !failed && Boolean(src);
+  const cancelGeneration = useStudio((s) => s.cancelGeneration);
 
   return (
     <div className="relative flex h-full min-h-0 w-full items-center justify-center">
@@ -58,6 +59,13 @@ function Stage({ item }: { item: GalleryItem }) {
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="size-8 animate-spin text-fg" />
           <p className="text-sm tabular-nums text-muted">A gerar… {Math.round(item.progress ?? 0)}%</p>
+          <button
+            type="button"
+            onClick={() => void cancelGeneration()}
+            className="h-10 rounded-full bg-surface px-4 text-sm font-medium text-fg"
+          >
+            Cancelar
+          </button>
         </div>
       )}
       {failed && (

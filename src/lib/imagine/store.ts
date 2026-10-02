@@ -17,6 +17,7 @@ import {
   pollImagineVideo,
   startCatalogGeneration,
   startImagineVideo,
+  cancelImagineGeneration,
 } from "./functions";
 import { GROK_MODEL_ID, isGrokModel, type ModelField } from "./catalog";
 import {
@@ -154,6 +155,7 @@ type StudioState = {
   deleteItem: (id: string) => Promise<void>;
   fillExample: (label: string) => void;
   generate: () => Promise<void>;
+  cancelGeneration: () => Promise<void>;
   setCatalogModel: (id: string) => Promise<void>;
   setCatalogValue: (key: string, value: string | number | boolean) => void;
   toggleFavorite: (id: string) => void;
@@ -172,6 +174,8 @@ async function resolveDisplay(item: GalleryItem): Promise<string | undefined> {
   }
   return undefined;
 }
+
+const cancelledRequests = new Set<string>();
 
 export const useStudio = create<StudioState>((set, get) => ({
   kind: "video",
@@ -208,8 +212,13 @@ export const useStudio = create<StudioState>((set, get) => ({
     const state = get();
     if (kind === "video") {
       const extra = IMAGE_ONLY_FORMATS.some((item) => item.id === state.formatId);
+      const hasStart = state.refs.some((item) => item.role === "start");
+      const refs = hasStart
+        ? state.refs
+        : state.refs.map((item, index) => (index === 0 ? { ...item, role: "start" as const } : item));
       set({
         kind,
+        refs,
         formatId: extra ? "reels" : state.formatId,
         action: state.sourceVideo ? state.action : "generate",
       });
@@ -550,21 +559,26 @@ export const useStudio = create<StudioState>((set, get) => ({
     }
 
     const format = resolveFormat(state.formatId, state.kind);
-    const startFrame = state.refs.find((r) => r.role === "start");
+    let startFrame = state.refs.find((r) => r.role === "start");
     const lastFrame = state.refs.find((r) => r.role === "last");
-    const references = state.refs.filter((r) => r.role === "ref");
+    let references = state.refs.filter((r) => r.role === "ref");
+    if (state.kind === "video" && state.action === "generate" && !startFrame && references[0]) {
+      startFrame = references[0];
+      references = references.slice(1);
+    }
     const duration = state.action === "extend" ? state.extendDuration : state.duration;
+    const pinFirstFrame = state.kind === "video" && state.action === "generate" && Boolean(startFrame);
 
     set({
       busy: true,
       error: null,
       enhancedPrompt: null,
-      busyLabel: "A interpretar o teu prompt…",
+      busyLabel: pinFirstFrame ? "A animar a foto…" : "A interpretar o teu prompt…",
     });
 
     try {
       let finalPrompt = prompt;
-      if (state.enhance) {
+      if (state.enhance && !pinFirstFrame) {
         try {
           const enhanced = await enhanceImaginePrompt({
             data: {
@@ -700,8 +714,8 @@ export const useStudio = create<StudioState>((set, get) => ({
           duration,
           generateAudio: state.generateAudio,
           startFrame: startFrame?.url,
-          lastFrame: lastFrame?.url,
-          references: references.map((r) => r.url),
+          lastFrame: pinFirstFrame ? undefined : lastFrame?.url,
+          references: pinFirstFrame ? [] : references.map((r) => r.url),
           sourceVideo: state.sourceVideo?.url,
         },
       });
@@ -736,13 +750,33 @@ export const useStudio = create<StudioState>((set, get) => ({
         persist(gallery);
         return { gallery, selectedId: id, busy: false, busyLabel: "" };
       });
-      toast.message("A renderizar o vídeo… aparece aqui em cima quando estiver pronto.");
+      toast.message(
+        pinFirstFrame
+          ? "O vídeo começa nesta foto. Aparece aqui em cima quando estiver pronto."
+          : "A renderizar o vídeo… aparece aqui em cima quando estiver pronto.",
+      );
       void pollUntilDone(id, started.requestId, set, get);
     } catch (err) {
       const message = shownError(err instanceof Error ? err.message : "");
       set({ busy: false, busyLabel: "", error: message });
       toast.error(message);
     }
+  },
+
+  cancelGeneration: async () => {
+    const pending = get().gallery.filter((item) => item.status === "pending" && item.requestId);
+    const ids = pending.map((item) => item.requestId!).filter(Boolean);
+    for (const id of ids) cancelledRequests.add(id);
+    set((s) => {
+      const gallery = s.gallery.map((item) =>
+        item.requestId && cancelledRequests.has(item.requestId)
+          ? { ...item, status: "failed" as const, error: "Cancelado." }
+          : item,
+      );
+      persist(gallery);
+      return { gallery, busy: false, busyLabel: "" };
+    });
+    await Promise.all(ids.map((requestId) => cancelImagineGeneration({ data: { requestId } }).catch(() => null)));
   },
 }));
 
@@ -817,6 +851,7 @@ async function runCatalog(
 
 async function pollUntilDone(id: string, requestId: string, set: SetState, get: GetState) {
   for (let i = 0; i < 240; i++) {
+    if (cancelledRequests.has(requestId)) return;
     await sleep(i === 0 ? 1200 : 2800);
     let result: Awaited<ReturnType<typeof pollImagineVideo>>;
     try {
