@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import {
+  hfEditIntent,
   hfModel,
   hfSize,
   isHfModel,
@@ -87,6 +88,17 @@ function editPrompt(prompt: string, values: Record<string, string | number | boo
   return `${prompt}. ${locks.join(". ")}. Keep the subject fully inside the original frame.`;
 }
 
+function fluxEditPrompt(
+  prompt: string,
+  values: Record<string, string | number | boolean>,
+): string {
+  const { removesClothes } = hfEditIntent(prompt);
+  const instruction = removesClothes
+    ? "Edit the image so the same clearly adult person is completely nude and unclothed. Remove every item of clothing, underwear, swimsuit and fabric from the body"
+    : prompt;
+  return editPrompt(instruction, values);
+}
+
 function guidanceFor(model: HfModel, fidelity: string): number {
   if (model.endpoint) return fidelity === "Baixa" ? 4 : fidelity === "Alta" ? 7 : 5.5;
   if (model.providerId.includes("kontext"))
@@ -148,7 +160,7 @@ function endpointPayload(
 
   if (model.endpoint?.handler === "flux2-klein") {
     return {
-      inputs: editPrompt(prompt, values),
+      inputs: fluxEditPrompt(prompt, values),
       image: imageBase64,
       num_inference_steps: 4,
       guidance_scale: 1,
