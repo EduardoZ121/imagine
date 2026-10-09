@@ -793,7 +793,7 @@ async function runCatalog(
     );
     if (!ok) return;
   }
-  set({ busy: true, busyLabel: "A enviar para o modelo…", error: null });
+  set({ busy: true, busyLabel: state.enhance ? "A ler o prompt…" : "A enviar para o modelo…", error: null });
   try {
     const imageUrl = state.refs.find((ref) => ref.role === "start")?.url || state.refs[0]?.url;
     if (imageUrl && !imageUrl.startsWith("data:image/") && !imageUrl.startsWith("https://")) {
@@ -802,11 +802,31 @@ async function runCatalog(
       toast.error(error);
       return;
     }
+    let prompt = state.prompt.trim();
+    if (state.enhance && prompt) {
+      try {
+        const enhanced = await enhanceImaginePrompt({
+          data: {
+            prompt,
+            kind: state.kind,
+            action: state.action,
+            aspectRatio: String(state.catalogValues.aspect_ratio || "auto"),
+            duration: state.kind === "video" ? state.duration : undefined,
+            hasReferences: state.refs.length > 0,
+            hasStartFrame: Boolean(imageUrl),
+            formatLabel: state.catalogName,
+          },
+        });
+        if (enhanced.ok && enhanced.prompt) prompt = enhanced.prompt;
+      } catch {
+        prompt = state.prompt.trim();
+      }
+    }
     const lastFrameUrl = state.refs.find((ref) => ref.role === "last")?.url;
     const started = await startCatalogGeneration({
       data: {
         modelId: state.catalogId,
-        prompt: state.prompt.trim(),
+        prompt,
         values: state.catalogValues,
         imageUrl,
         lastFrameUrl,
@@ -824,7 +844,7 @@ async function runCatalog(
       id,
       kind: started.kind,
       prompt: state.prompt.trim(),
-      enhancedPrompt: state.prompt.trim(),
+      enhancedPrompt: prompt,
       aspectRatio: String(state.catalogValues.aspect_ratio || "auto"),
       resolution: String(state.catalogValues.resolution || state.catalogValues.megapixels || ""),
       url: "",

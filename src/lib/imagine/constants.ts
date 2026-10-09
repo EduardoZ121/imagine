@@ -15,7 +15,7 @@ export const VIDEO_EDIT_MODEL = "xai/grok-imagine-video";
 
 export const MAX_IMAGE_REFS = 5;
 export const MAX_VIDEO_REFS = 7;
-export const MAX_PROMPT = 4000;
+export const MAX_PROMPT = 100_000;
 export const MAX_IMAGE_N = 4;
 export const MAX_DATA_URL_CHARS = 12_000_000;
 

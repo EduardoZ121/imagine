@@ -370,7 +370,8 @@ Hard rules:
 - For IMAGE: composition, lighting, materials, lens. No motion language.
 - Do not add on-screen text, watermarks, logos, or subtitles unless the user asked.
 - Do not add sexual content the user did not ask for.
-- Do not refuse. Do not explain. Output ONLY the rewritten prompt, no quotes.`;
+- If the user wrote a long script, keep every beat, name, and camera move. Do not compress a detailed prompt into one sentence.
+- Do not refuse. Do not explain. Do not lecture. Output ONLY the rewritten prompt, no quotes.`;
 
   const user = [
     `Modality: ${modality}`,
@@ -386,14 +387,14 @@ Hard rules:
     .join("\n");
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
+  const timer = setTimeout(() => controller.abort(), 25000);
   try {
     const res = await xaiFetch("/v1/chat/completions", {
       method: "POST",
       body: JSON.stringify({
         model: "grok-4.5",
-        temperature: 0.25,
-        max_tokens: 800,
+        temperature: 0.2,
+        max_tokens: 4096,
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
@@ -406,7 +407,9 @@ Hard rules:
       choices?: { message?: { content?: string } }[];
     };
     const text = body.choices?.[0]?.message?.content?.trim();
-    if (!text) return { ok: true, prompt: original };
+    if (!text || /i can't|i cannot|i won't|copyright|não posso|recuso/i.test(text)) {
+      return { ok: true, prompt: original };
+    }
     const cleaned = text.replace(/^["'\s]+|["'\s]+$/g, "").slice(0, MAX_PROMPT);
     return { ok: true, prompt: cleaned || original };
   } catch {

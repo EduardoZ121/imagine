@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { hfModel, hfSize, isHfModel, maxSteps, type HfModel } from "./hf";
+import { MAX_PROMPT } from "./constants";
 
 const ROUTER = "https://router.huggingface.co/fal-ai";
 
@@ -164,7 +165,7 @@ export async function startHfModel(input: {
   if (!model) return { ok: false, error: "Este modelo da Hugging Face não está nesta lista." };
   const token = hfToken();
   if (!token) return { ok: false, error: "A Hugging Face não está configurada neste servidor." };
-  const prompt = input.prompt.trim().slice(0, 2000);
+  const prompt = input.prompt.trim().slice(0, MAX_PROMPT);
   if (!prompt) return { ok: false, error: "Escreve um prompt." };
   if (model.needsImage && !input.imageUrl) {
     return { ok: false, error: "Este modelo precisa de uma foto. Anexa uma imagem. Crédito não foi gasto." };

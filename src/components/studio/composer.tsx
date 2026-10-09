@@ -19,7 +19,6 @@ import {
   formatsFor,
   IMAGE_QUALITIES,
   IMAGE_RESOLUTIONS,
-  MAX_PROMPT,
   PROMPT_PLACEHOLDERS,
   resolveFormat,
   VIDEO_DURATION_MAX,
@@ -280,8 +279,8 @@ export function Composer() {
                         ? "O que queres mudar neste vídeo…"
                         : PROMPT_PLACEHOLDERS[kind]
             }
-            rows={2}
-            className="max-h-24 min-h-12 flex-1 resize-none bg-transparent py-2 text-base leading-snug text-fg placeholder:text-subtle focus:outline-none"
+            rows={3}
+            className="max-h-[45vh] min-h-16 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-base leading-snug text-fg placeholder:text-subtle focus:outline-none"
           />
         </div>
 
@@ -440,7 +439,7 @@ export function Composer() {
         </Button>
 
         <p className="px-2 pt-1 text-right text-[11px] tabular-nums text-subtle">
-          {prompt.length}/{MAX_PROMPT}
+          {prompt.length}
         </p>
       </div>
     </div>

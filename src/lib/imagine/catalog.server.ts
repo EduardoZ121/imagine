@@ -1,5 +1,6 @@
 import { replicateAuthorization } from "./xai.server";
 import { GROK_CATALOG_MODEL, type CatalogModel, type CatalogType, type ModelField } from "./catalog";
+import { MAX_PROMPT } from "./constants";
 import { hfFields, hfModel } from "./hf";
 import { startHfModel } from "./hf.server";
 
@@ -310,7 +311,7 @@ export async function startCatalogModel(input: {
   if (hfModel(input.modelId)) return startHfModel(input);
   const described = await describeModel(input.modelId);
   if (!described.ok) return described;
-  const prompt = input.prompt.trim().slice(0, 4000);
+  const prompt = input.prompt.trim().slice(0, MAX_PROMPT);
   const upscale = described.model.followsPrompt === false;
   if (!prompt && !(upscale && input.imageUrl)) return { ok: false, error: "Escreve um prompt." };
   if (upscale && prompt && !/nitidez|upscale|resolu|qualidade|aumentar/i.test(prompt)) {
